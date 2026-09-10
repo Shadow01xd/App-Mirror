@@ -17,13 +17,21 @@ import com.tyu.app.model.UiFeature
 fun FeatureGrid(cameraActive: Boolean, microphoneActive: Boolean, storageEnabled: Boolean,
     onFeature: (UiFeature) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(TyuDimens.Medium)) {
-        TyuFeatureCard("Almacenamiento", if (storageEnabled) "Disponible" else "Desactivado",
-            StorageIcon, { onFeature(UiFeature.Storage) }, storageEnabled)
-        TyuFeatureCard("Cámara", if (cameraActive) "Activa" else "Desactivada",
-            CameraIcon, { onFeature(UiFeature.Camera) }, cameraActive)
-        TyuFeatureCard("Micrófono", if (microphoneActive) "Activo" else "Desactivado",
-            MicrophoneIcon, { onFeature(UiFeature.Microphone) }, microphoneActive)
-        TyuFeatureCard("Enviar archivos", "Fotos, videos y documentos",
-            TransferIcon, { onFeature(UiFeature.Transfer) })
+        Box(Modifier.fillMaxWidth().tyuEnter(0)) {
+            TyuFeatureCard("Almacenamiento", if (storageEnabled) "Disponible" else "Desactivado",
+                StorageIcon, { onFeature(UiFeature.Storage) }, storageEnabled)
+        }
+        Box(Modifier.fillMaxWidth().tyuEnter(1)) {
+            TyuFeatureCard("Cámara", if (cameraActive) "Activa" else "Desactivada",
+                CameraIcon, { onFeature(UiFeature.Camera) }, cameraActive)
+        }
+        Box(Modifier.fillMaxWidth().tyuEnter(2)) {
+            TyuFeatureCard("Micrófono", if (microphoneActive) "Activo" else "Desactivado",
+                MicrophoneIcon, { onFeature(UiFeature.Microphone) }, microphoneActive)
+        }
+        Box(Modifier.fillMaxWidth().tyuEnter(3)) {
+            TyuFeatureCard("Enviar archivos", "Fotos, videos y documentos",
+                TransferIcon, { onFeature(UiFeature.Transfer) })
+        }
     }
 }

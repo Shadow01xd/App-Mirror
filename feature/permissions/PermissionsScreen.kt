@@ -20,10 +20,14 @@ fun PermissionsScreen(onContinue: () -> Unit, onBack: () -> Unit,
         TyuHeading("Un poco de confianza", "Necesitamos algunos permisos para que TYU funcione correctamente.")
         Column(verticalArrangement = Arrangement.spacedBy(TyuDimens.Gap),
             modifier = Modifier.padding(vertical = TyuDimens.Page)) {
-            TyuPermissionCard("Dispositivos cercanos", "Encontrar tu PC a tu alrededor.",
-                TyuIcons.Devices, nearby, { nearby = it })
-            TyuPermissionCard("Red local", "Conectar tus dispositivos entre sí.",
-                TyuIcons.Wifi, network, { network = it })
+            Box(Modifier.fillMaxWidth().tyuEnter(0)) {
+                TyuPermissionCard("Dispositivos cercanos", "Encontrar tu PC a tu alrededor.",
+                    TyuIcons.Devices, nearby, { nearby = it })
+            }
+            Box(Modifier.fillMaxWidth().tyuEnter(1)) {
+                TyuPermissionCard("Red local", "Conectar tus dispositivos entre sí.",
+                    TyuIcons.Wifi, network, { network = it })
+            }
         }
         Column(verticalArrangement = Arrangement.spacedBy(TyuDimens.Page)) {
             TyuFootnote("Esta vista es una demostración. Los interruptores no solicitan permisos ni activan conexiones.")

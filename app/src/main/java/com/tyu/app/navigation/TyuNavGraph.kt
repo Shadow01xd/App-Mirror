@@ -32,15 +32,18 @@ fun TyuNavGraph() {
     var nearby by rememberSaveable { mutableStateOf(NearbyUiState.Empty) }
     var failAttempt by rememberSaveable { mutableStateOf(false) }
     var mirror by rememberSaveable { mutableStateOf(MirrorUiState.Idle) }
+    var forward by remember { mutableStateOf(true) }
     val screenStates = rememberSaveableStateHolder()
 
     fun navigate(next: TyuRoute) {
         if (next != route) {
+            forward = true
             history = ArrayList(history + route.name)
             route = next
         }
     }
     fun back() {
+        forward = false
         if (route == TyuRoute.Connecting) app.connection = UiConnectionState.Found
         mirror = MirrorUiState.Idle
         if (history.isNotEmpty()) {
@@ -77,6 +80,7 @@ fun TyuNavGraph() {
         }
         if (route == TyuRoute.Connecting) {
             delay(1200)
+            forward = true
             if (failAttempt) {
                 app.connection = UiConnectionState.Error
                 route = TyuRoute.ConnectionError
@@ -92,11 +96,12 @@ fun TyuNavGraph() {
             delay(1000)
             app.mirrorActive = true
             mirror = MirrorUiState.Active
+            forward = true
             route = TyuRoute.MirrorActive
         }
     }
 
-    AnimatedContent(targetState = route, transitionSpec = { tyuNavigationTransition() }, label = "Pantalla TYU") { current ->
+    AnimatedContent(targetState = route, transitionSpec = { tyuNavigationTransition(forward) }, label = "Pantalla TYU") { current ->
         screenStates.SaveableStateProvider(current.name) {
             val computer = app.device.computerName
             when (current) {

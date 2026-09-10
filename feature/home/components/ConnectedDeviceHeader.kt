@@ -13,12 +13,15 @@ import com.tyu.app.ui.icons.TyuIcons
 import com.tyu.app.ui.theme.*
 
 @Composable
-fun ConnectedDeviceHeader(device: UiDevice, onDetails: () -> Unit) {
+fun ConnectedDeviceHeader(device: UiDevice, onDetails: () -> Unit, toPhone: Boolean = true) {
     val compact = LocalConfiguration.current.screenHeightDp < 500
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(TyuDimens.Gap)) {
         TyuHeading(device.name)
         TyuStatusDot("Conectado")
-        if (!compact) TyuDeviceStage(Modifier.fillMaxWidth().height(156.dp))
+        if (!compact) TyuDeviceStage(
+            Modifier.fillMaxWidth().height(TyuDimens.HeroIcon * 1.5f),
+            toPhone = toPhone,
+        )
         Surface(onClick = onDetails, color = TyuColors.Background, shape = TyuShapes.Control) {
             Row(Modifier.fillMaxWidth().heightIn(min = TyuDimens.ButtonHeight).padding(vertical = TyuDimens.Small),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(TyuDimens.Medium)) {

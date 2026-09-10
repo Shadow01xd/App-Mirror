@@ -3,6 +3,7 @@ package com.tyu.app.ui.components
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -25,11 +26,12 @@ fun TyuModeSelector(selected: UiMode, onSelect: (UiMode) -> Unit) {
         UiMode.entries.forEach { mode ->
             val active = mode == selected
             val background by animateColorAsState(if (active) TyuColors.Primary else TyuColors.Surface,
-                tween(TyuMotion.State), label = "Selección de modo")
+                tween(TyuMotion.State, easing = TyuMotion.Ease), label = "Selección de modo")
             val foreground by animateColorAsState(if (active) TyuColors.OnPrimary else TyuColors.Secondary,
-                tween(TyuMotion.State), label = "Icono de modo")
-            Column(Modifier.weight(1f).clip(TyuShapes.Control).background(background)
-                .selectable(active, role = Role.Tab, onClick = { onSelect(mode) })
+                tween(TyuMotion.State, easing = TyuMotion.Ease), label = "Icono de modo")
+            val interaction = remember { MutableInteractionSource() }
+            Column(Modifier.weight(1f).tyuPressScale(interaction).clip(TyuShapes.Control).background(background)
+                .selectable(active, interaction, indication = null, role = Role.Tab, onClick = { onSelect(mode) })
                 .heightIn(min = TyuDimens.ButtonHeight).padding(vertical = TyuDimens.Medium),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(TyuDimens.Tiny)) {

@@ -20,8 +20,14 @@ fun NearbyScreen(state: NearbyUiState, onSearch: () -> Unit, onPair: (UiDevice) 
     TyuPage(onBack = onBack, onSettings = onSettings, spread = state != NearbyUiState.Found) {
         if (state == NearbyUiState.Found) {
             TyuHeading("Tu próximo enlace", "Elige el equipo que quieres conectar.")
-            TyuSectionTitle("DISPOSITIVOS CERCANOS · ${MockDevices.nearby.size}")
-            MockDevices.nearby.forEach { device -> TyuDeviceCard(device, { onPair(device) }) }
+            Surface(Modifier.fillMaxWidth().tyuEnter(), color = TyuColors.Surface, shape = TyuShapes.Card) {
+                Column {
+                    MockDevices.nearby.forEachIndexed { index, device ->
+                        if (index > 0) HorizontalDivider(color = TyuColors.Border)
+                        TyuDeviceRow(device) { onPair(device) }
+                    }
+                }
+            }
             TyuSecondaryButton("Buscar de nuevo", onSearch, Modifier.fillMaxWidth(), TyuIcons.Refresh)
         } else {
             TyuHero(TyuIcons.Desktop,

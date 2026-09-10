@@ -21,7 +21,7 @@ fun MirrorScreen(computer: String, state: MirrorUiState, onStart: () -> Unit, on
     }) {
         TyuConnectionBanner(computer)
         TyuHeading("Espejo", "Comparte la pantalla de este dispositivo con $computer.")
-        TyuDeviceStage(Modifier.fillMaxWidth().height(TyuDimens.HeroIcon * 1.4f))
+        TyuDeviceStage(Modifier.fillMaxWidth().height(TyuDimens.HeroIcon * 1.4f), toPhone = false)
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(TyuDimens.Page)) {
             TyuDirectionStrip("teléfono", "PC")
             if (state == MirrorUiState.Connecting) {

@@ -3,6 +3,7 @@ package com.tyu.app.ui.components
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -24,11 +25,14 @@ fun TyuOptions(title: String, choices: List<String>, selected: String, onSelect:
             choices.forEach { choice ->
                 val active = selected == choice
                 val fill by animateColorAsState(if (active) TyuColors.PrimarySurface else TyuColors.Surface,
-                    tween(TyuMotion.State), label = "Fondo de opción")
+                    tween(TyuMotion.State, easing = TyuMotion.Ease), label = "Fondo de opción")
                 val stroke by animateColorAsState(if (active) TyuColors.Primary else TyuColors.Border,
-                    tween(TyuMotion.State), label = "Borde de opción")
-                Surface(color = fill, shape = TyuShapes.Control, border = BorderStroke(TyuDimens.Tiny / 4, stroke)) {
-                    Box(Modifier.selectable(active, role = Role.RadioButton, onClick = { onSelect(choice) })
+                    tween(TyuMotion.State, easing = TyuMotion.Ease), label = "Borde de opción")
+                val interaction = remember { MutableInteractionSource() }
+                Surface(color = fill, shape = TyuShapes.Control, border = BorderStroke(TyuDimens.Tiny / 4, stroke),
+                    modifier = Modifier.tyuPressScale(interaction)) {
+                    Box(Modifier.selectable(active, interaction, indication = null,
+                        role = Role.RadioButton, onClick = { onSelect(choice) })
                         .heightIn(min = TyuDimens.Touch)
                         .padding(horizontal = TyuDimens.Gap, vertical = TyuDimens.Medium), contentAlignment = Alignment.Center) {
                         Text(choice, color = if (active) TyuColors.Primary else TyuColors.Secondary,

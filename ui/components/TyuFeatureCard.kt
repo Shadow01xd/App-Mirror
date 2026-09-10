@@ -2,6 +2,7 @@ package com.tyu.app.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -15,8 +16,10 @@ import com.tyu.app.ui.theme.*
 fun TyuFeatureCard(title: String, subtitle: String, icon: ImageVector, onClick: () -> Unit,
     active: Boolean = false) {
     val ink by animateColorAsState(if (active) TyuColors.Primary else TyuColors.Secondary,
-        tween(TyuMotion.State), label = "Estado del servicio")
-    Surface(onClick = onClick, modifier = Modifier.fillMaxWidth(), color = TyuColors.Background,
+        tween(TyuMotion.State, easing = TyuMotion.Ease), label = "Estado del servicio")
+    val interaction = remember { MutableInteractionSource() }
+    Surface(onClick = onClick, modifier = Modifier.fillMaxWidth().tyuPressScale(interaction),
+        interactionSource = interaction, color = TyuColors.Background,
         shape = TyuShapes.Control) {
         Column {
             Row(Modifier.padding(vertical = TyuDimens.Gap).heightIn(min = TyuDimens.Touch),
