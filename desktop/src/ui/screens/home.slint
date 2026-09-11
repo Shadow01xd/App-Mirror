@@ -1,0 +1,57 @@
+import { Colors } from "../theme/colors.slint";
+import { Data } from "../data.slint";
+import { TyuButton } from "../components/tyu-button.slint";
+import { TyuDeviceStage } from "../components/tyu-device-stage.slint";
+import { TyuModeSelector } from "../components/tyu-mode-selector.slint";
+export component HomeScreen inherits Rectangle {
+    in property <bool> compact: false;
+    background: transparent;
+    min-width: 600px;
+    if Data.connected: VerticalLayout {
+        spacing: 24px; alignment: start;
+        HorizontalLayout {
+            height: 64px; spacing: 20px;
+            VerticalLayout {
+                spacing: 7px;
+                Text { text: Data.device-name; color: Colors.text-primary; font-size: 28px; font-weight: 600; overflow: elide; }
+                Text { text: "Conectado por Wi-Fi"; color: Colors.success; font-size: 13px; }
+            }
+            TyuButton { label: "Desconectar"; secondary: true; width: 130px; clicked => { Data.action("disconnect"); } }
+        }
+        TyuDeviceStage { height: root.compact ? 240px : 330px; }
+        VerticalLayout {
+            spacing: 8px;
+            Text { text: Data.mode == 0 ? "Más espacio para tus ideas." : Data.mode == 1 ? "Tu teléfono, a lo grande." : "Tus dispositivos, en equipo."; font-size: 23px; font-weight: 600; color: Colors.text-primary; }
+            Text { text: Data.mode == 0 ? "PC → Teléfono · Usa tu teléfono como segunda pantalla." : Data.mode == 1 ? "Teléfono → PC · Visualiza tu teléfono en el escritorio." : "PC ↔ Teléfono · Conecta los recursos de ambos equipos."; color: Colors.text-secondary; font-size: 13px; wrap: word-wrap; }
+        }
+        TyuModeSelector { selected-index: Data.mode; selected(i) => { Data.option("mode", i); } }
+    }
+    if !Data.connected: VerticalLayout {
+        spacing: 24px; alignment: start;
+        Text { text: "No hay dispositivos conectados"; font-size: 28px; font-weight: 600; color: Colors.text-primary; wrap: word-wrap; }
+        Text { text: "Conecta tu teléfono para empezar."; color: Colors.text-secondary; font-size: 15px; }
+        Rectangle {
+            height: 360px; background: Colors.stage; border-radius: 12px;
+            HorizontalLayout {
+                padding: 28px; spacing: 32px;
+                Rectangle {
+                    width: 240px; background: transparent;
+                    Rectangle {
+                        y: (parent.height - self.height) / 2; width: 240px; height: 240px;
+                        background: Data.pairing-error == "" ? #ffffff : Colors.surface; border-radius: 8px;
+                        if Data.pairing-error == "": Image { x: 8px; y: 8px; width: 224px; height: 224px; source: Data.pairing-qr; image-fit: contain; }
+                        if Data.pairing-error != "": Text { x: 20px; y: 20px; width: parent.width - 40px; height: parent.height - 40px; text: "QR no disponible"; horizontal-alignment: center; vertical-alignment: center; color: Colors.text-secondary; }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center; spacing: 18px;
+                    Text { text: "Escanea el QR"; color: Colors.text-primary; font-size: 22px; font-weight: 600; }
+                    Text { text: "Usa la cámara de tu teléfono y abre el enlace. Ambos equipos deben estar en la misma red Wi-Fi."; color: Colors.text-secondary; font-size: 14px; wrap: word-wrap; }
+                    Text { text: "Después, acepta la solicitud que aparecerá en este equipo."; color: Colors.text-secondary; font-size: 14px; wrap: word-wrap; }
+                    Text { text: Data.pairing-error; visible: Data.pairing-error != ""; color: Colors.danger; font-size: 13px; wrap: word-wrap; }
+                }
+            }
+        }
+        Text { text: Data.pairing-error == "" ? "Esperando una solicitud de conexión…" : "Revisa tu conexión a la red y reinicia TYU."; color: Colors.text-secondary; font-size: 13px; }
+    }
+}

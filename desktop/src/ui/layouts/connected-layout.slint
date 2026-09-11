@@ -1,0 +1,23 @@
+import { Colors } from "../theme/colors.slint";
+import { Spacing } from "../theme/spacing.slint";
+import { TyuDeviceStage } from "../components/tyu-device-stage.slint";
+
+export component ConnectedLayout inherits Rectangle {
+    in property <string> device-name;
+    in property <string> status-text;
+
+    background: Colors.background;
+
+    HorizontalLayout {
+        padding: Spacing.xl;
+        spacing: Spacing.xl;
+
+        TyuDeviceStage {
+            device-name: root.device-name;
+            status-text: root.status-text;
+        }
+
+        Rectangle { background: transparent; }
+    }
+}
+

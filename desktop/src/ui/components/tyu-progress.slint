@@ -1,0 +1,7 @@
+import { Colors } from "../theme/colors.slint";
+import { Motion } from "../theme/motion.slint";
+export component TyuProgress inherits Rectangle {
+    in property <float> value;
+    height: 4px; border-radius: 2px; background: Colors.border; clip: true;
+    Rectangle { width: parent.width * clamp(root.value, 0, 1); height: parent.height; background: Colors.accent; animate width { duration: Motion.standard; } }
+}

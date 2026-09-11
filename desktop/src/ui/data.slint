@@ -1,0 +1,38 @@
+export struct DeviceItem { name: string, detail: string, connected: bool }
+export struct FileItem { name: string, size: string, progress: float, status: string }
+export global Data {
+    in-out property <[DeviceItem]> devices;
+    in-out property <[FileItem]> files;
+    in-out property <[string]> sessions;
+    in-out property <int> page: 0;
+    in-out property <int> mode: 0;
+    in-out property <int> selected-device: 0;
+    in-out property <string> device-name;
+    in-out property <bool> connected: false;
+    in-out property <string> pending-name;
+    in-out property <string> pairing-url;
+    in-out property <string> pairing-error;
+    in-out property <image> pairing-qr;
+    in-out property <bool> active: false;
+    in-out property <bool> scanning: false;
+    in-out property <int> dialog: 0;
+    in-out property <int> service: -1;
+    in-out property <string> notice;
+    in-out property <string> elapsed: "00:00";
+    in-out property <int> display-mode: 0;
+    in-out property <int> orientation: 0;
+    in-out property <int> quality: 0;
+    in-out property <int> camera-source: 0;
+    in-out property <bool> camera: false;
+    in-out property <bool> microphone: false;
+    in-out property <bool> storage: false;
+    in-out property <bool> noise-reduction: true;
+    in-out property <bool> reduced-motion: false;
+    in-out property <bool> notifications: true;
+    in-out property <bool> transfer-running: false;
+    in-out property <bool> transfer-paused: false;
+    callback action(string);
+    callback option(string, int);
+    callback toggle(string, bool);
+    pure callback matches(string, string) -> bool;
+}

@@ -1,0 +1,24 @@
+import { Colors } from "../theme/colors.slint";
+import { TyuToggle } from "tyu-toggle.slint";
+import { TyuButton } from "tyu-button.slint";
+export component TyuServiceRow inherits Rectangle {
+    in property <string> title;
+    in property <string> description;
+    in property <image> icon;
+    in property <bool> available: true;
+    in-out property <bool> enabled;
+    callback toggled(bool);
+    callback open();
+    height: 92px; background: Colors.surface; border-radius: 10px;
+    VerticalLayout { padding: 14px; spacing: 9px;
+        HorizontalLayout {
+            Image { source: root.icon; width: 22px; height: 22px; colorize: root.enabled ? Colors.accent : Colors.text-secondary; }
+            Rectangle { horizontal-stretch: 1; background: transparent; }
+            TyuToggle { label: root.title; checked: root.enabled; enabled: root.available; toggled(v) => { root.toggled(v); } }
+        }
+        HorizontalLayout {
+            TyuButton { label: root.title; quiet: true; height: 28px; clicked => { root.open(); } }
+            Text { text: root.enabled ? "Activo" : "Inactivo"; color: root.enabled ? Colors.success : Colors.muted; font-size: 11px; vertical-alignment: center; horizontal-alignment: right; }
+        }
+    }
+}

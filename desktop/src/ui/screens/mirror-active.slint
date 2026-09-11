@@ -1,0 +1,15 @@
+import { Colors } from "../theme/colors.slint";
+import { Typography } from "../theme/typography.slint";
+import { Spacing } from "../theme/spacing.slint";
+
+export component MirrorActiveScreen inherits Rectangle {
+    background: Colors.background;
+    VerticalLayout {
+        padding: Spacing.xl;
+        spacing: Spacing.md;
+        alignment: start;
+        Text { text: "Mirroring active"; color: Colors.text-primary; font-family: Typography.ui-family; font-size: Typography.display-size; font-weight: 700; }
+        Text { text: "Your selected display is being mirrored."; color: Colors.text-secondary; font-family: Typography.ui-family; font-size: Typography.body-size; wrap: word-wrap; }
+    }
+}
+

@@ -1,0 +1,32 @@
+import { Colors } from "../theme/colors.slint";
+import { Typography } from "../theme/typography.slint";
+import { Spacing } from "../theme/spacing.slint";
+
+export component TyuTitlebar inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle;
+
+    height: 76px;
+    background: Colors.background;
+
+    VerticalLayout {
+        padding-left: Spacing.xl;
+        padding-right: Spacing.xl;
+        spacing: Spacing.xs;
+
+        Text {
+            text: root.title;
+            color: Colors.text-primary;
+            font-family: Typography.ui-family;
+            font-size: Typography.heading-size;
+            font-weight: 600;
+        }
+        Text {
+            text: root.subtitle;
+            color: Colors.text-secondary;
+            font-family: Typography.ui-family;
+            font-size: Typography.caption-size;
+        }
+    }
+}
+

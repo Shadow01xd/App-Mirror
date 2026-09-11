@@ -1,0 +1,68 @@
+import { ScrollView, Palette } from "std-widgets.slint";
+import { Colors } from "../theme/colors.slint";
+import { Typography } from "../theme/typography.slint";
+import { Motion } from "../theme/motion.slint";
+import { Data } from "../data.slint";
+import { TyuSidebar } from "../components/tyu-sidebar.slint";
+import { TyuButton } from "../components/tyu-button.slint";
+import { TyuModal } from "../components/tyu-modal.slint";
+import { HomeScreen } from "../screens/home.slint";
+import { SessionsScreen } from "../screens/sessions.slint";
+import { SettingsScreen } from "../screens/settings.slint";
+import { DeviceDetailsScreen } from "../screens/device-details.slint";
+export { Data, Motion }
+export component DesktopShell inherits Window {
+    title: "TYU — Tu teléfono, en tu escritorio";
+    preferred-width: 1260px; preferred-height: 820px;
+    min-width: 1000px; min-height: 660px;
+    background: Colors.background;
+    default-font-family: Typography.ui-family;
+    default-font-size: 14px;
+    private property <int> current-page: Data.page;
+    private property <float> enter: 1;
+    private property <bool> animate-enter: true;
+    changed current-page => { root.animate-enter = false; root.enter = 0; entrance-timer.start(); }
+    entrance-timer := Timer { interval: 20ms; triggered => { root.animate-enter = true; root.enter = 1; self.stop(); } }
+    animate enter { duration: root.animate-enter ? Motion.navigate : 0ms; easing: cubic-bezier(0.2, 0, 0, 1); }
+    init => { Palette.color-scheme = ColorScheme.dark; }
+    VerticalLayout { spacing: 0px;
+        Rectangle { height: 72px; background: Colors.background;
+            HorizontalLayout { padding-left: 27px; padding-right: 28px; spacing: 18px;
+                Text { text: "TYU"; font-size: 30px; font-weight: 600; color: Colors.accent; vertical-alignment: center; letter-spacing: 3px; }
+                Rectangle { width: 1px; background: transparent; Rectangle { width: 1px; height: 20px; y: (parent.height - self.height) / 2; background: Colors.border; } }
+                Text { text: "Tu teléfono, en tu escritorio."; font-size: 12px; color: Colors.muted; vertical-alignment: center; }
+                Rectangle { horizontal-stretch: 1; }
+            }
+            Rectangle { y: parent.height - 1px; height: 1px; width: parent.width; background: #242424; }
+        }
+        HorizontalLayout { spacing: 0px;
+            TyuSidebar { enabled: Data.dialog == 0; }
+            ScrollView {
+                enabled: Data.dialog == 0;
+                opacity: 0.75 + root.enter * 0.25;
+                VerticalLayout { padding: 30px; alignment: start;
+                    if Data.page == 0: HomeScreen { compact: root.height < 760px; }
+                    if Data.page == 2: SessionsScreen {}
+                    if Data.page == 3: SettingsScreen {}
+                    if Data.page == 4: DeviceDetailsScreen {}
+                }
+            }
+        }
+        Rectangle { height: 33px; background: Colors.stage;
+            HorizontalLayout { padding-left: 23px; padding-right: 23px; spacing: 12px;
+                Rectangle { width: 5px; height: 5px; border-radius: 3px; background: Colors.accent; }
+                Text { text: Data.connected ? "Conectado por Wi-Fi" : "Esperando un teléfono"; font-size: 11px; color: Colors.text-secondary; vertical-alignment: center; }
+                Text { text: Data.active ? "Sesión  " + Data.elapsed : "TYU Desktop"; font-size: 10px; color: Colors.muted; horizontal-alignment: right; vertical-alignment: center; }
+            }
+        }
+    }
+    if Data.notice != "" && Data.notifications && Data.dialog == 0: Rectangle {
+        x: parent.width - self.width - 30px; y: parent.height - 100px; width: 400px; height: 52px;
+        background: Colors.surface-muted; border-width: 1px; border-color: #55554b; border-radius: 8px;
+        HorizontalLayout { padding: 13px; spacing: 10px;
+            Image { source: @image-url("../../../assets/icons/check.svg"); width: 20px; colorize: Colors.accent; }
+            Text { text: Data.notice; font-size: 12px; color: Colors.text-primary; wrap: word-wrap; }
+        }
+    }
+    if Data.dialog != 0: TyuModal {}
+}

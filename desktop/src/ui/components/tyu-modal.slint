@@ -1,0 +1,31 @@
+import { Colors } from "../theme/colors.slint";
+import { Data } from "../data.slint";
+import { TyuButton } from "tyu-button.slint";
+export component TyuModal inherits Rectangle {
+    background: #000000b3;
+    TouchArea {}
+    focus := FocusScope {
+        init => { self.focus(); }
+        key-pressed(e) => { if e.text == Key.Escape { Data.action("reject-pair"); return accept; } reject }
+        Rectangle {
+            width: min(480px, parent.width - 60px); height: 310px;
+            x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+            background: Colors.surface; border-radius: 14px; border-width: 1px; border-color: Colors.border;
+            VerticalLayout {
+                padding: 30px; spacing: 22px; alignment: start;
+                Rectangle {
+                    height: 32px; background: transparent;
+                    Image { x: 0px; width: 28px; height: 28px; y: 2px; source: @image-url("../../../assets/icons/phone.svg"); colorize: Colors.accent; }
+                    Text { x: 42px; height: 32px; text: "Solicitud de conexión"; font-size: 23px; font-weight: 600; color: Colors.text-primary; vertical-alignment: center; }
+                }
+                Text { text: Data.pending-name + " se quiere conectar a este equipo."; color: Colors.text-primary; font-size: 17px; wrap: word-wrap; }
+                Text { text: "¿Permitir la conexión? Acepta solo si reconoces este teléfono."; color: Colors.text-secondary; font-size: 13px; wrap: word-wrap; }
+                HorizontalLayout {
+                    spacing: 12px;
+                    TyuButton { in-dialog: true; label: "Rechazar"; secondary: true; icon: @image-url("../../../assets/icons/close.svg"); has-icon: true; clicked => { Data.action("reject-pair"); } }
+                    TyuButton { in-dialog: true; label: "Aceptar"; icon: @image-url("../../../assets/icons/check.svg"); has-icon: true; clicked => { Data.action("accept-pair"); } }
+                }
+            }
+        }
+    }
+}

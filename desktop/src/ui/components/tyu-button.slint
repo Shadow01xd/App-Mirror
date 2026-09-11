@@ -1,0 +1,48 @@
+import { Colors } from "../theme/colors.slint";
+import { Motion } from "../theme/motion.slint";
+import { Data } from "../data.slint";
+export component TyuButton inherits Rectangle {
+    in property <string> label;
+    in property <image> icon;
+    in property <bool> has-icon: false;
+    in property <bool> enabled: true;
+    in property <bool> secondary: false;
+    in property <bool> quiet: false;
+    in property <bool> selected: false;
+    in property <bool> in-dialog: false;
+    in property <bool> align-left: false;
+    in property <length> icon-size: 20px;
+    private property <bool> interactive: enabled && (Data.dialog == 0 || in-dialog);
+    callback clicked();
+    min-width: 40px;
+    preferred-width: label == "" ? 40px : 160px;
+    height: 40px;
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: label;
+    accessible-enabled: interactive;
+    accessible-action-default => { if root.interactive { root.clicked(); } }
+    background: !enabled ? Colors.surface-muted : selected ? Colors.primary-surface : quiet ? (touch.has-hover ? Colors.surface-muted : transparent) : secondary ? (touch.has-hover ? #303030 : Colors.surface) : (touch.pressed ? #d9b43d : touch.has-hover ? #ffe078 : Colors.accent);
+    border-radius: 8px;
+    border-width: focus.has-focus ? 2px : secondary || selected ? 1px : 0px;
+    border-color: focus.has-focus || selected ? Colors.accent : Colors.border;
+    opacity: enabled ? 1 : 0.45;
+    animate background { duration: Motion.fast; }
+    transform-scale-x: touch.pressed && !Motion.reduced ? 97% : 100%;
+    transform-scale-y: touch.pressed && !Motion.reduced ? 97% : 100%;
+    animate transform-scale-x, transform-scale-y { duration: Motion.fast; easing: cubic-bezier(0.2, 0, 0, 1); }
+    HorizontalLayout {
+        padding-left: 14px; padding-right: 14px; spacing: 8px; alignment: root.align-left ? start : center;
+        if root.has-icon: Rectangle {
+            width: root.icon-size;
+            background: transparent;
+            Image { source: root.icon; width: root.icon-size; height: root.icon-size; y: (parent.height - self.height) / 2; image-fit: contain; colorize: root.secondary || root.quiet || root.selected ? (root.selected ? Colors.accent : Colors.text-primary) : Colors.accent-foreground; }
+        }
+        Text { text: root.label; font-size: 13px; font-weight: 600; color: root.secondary || root.quiet || root.selected ? (root.selected ? Colors.accent : Colors.text-primary) : Colors.accent-foreground; vertical-alignment: center; }
+    }
+    focus := FocusScope {
+        enabled: root.interactive;
+        key-pressed(event) => { if event.text == Key.Return || event.text == " " { root.clicked(); return accept; } reject }
+    }
+    touch := TouchArea { enabled: root.interactive; mouse-cursor: pointer; clicked => { focus.focus(); root.clicked(); } }
+}

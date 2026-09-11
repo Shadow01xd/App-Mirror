@@ -1,0 +1,35 @@
+import { Colors } from "../theme/colors.slint";
+import { Typography } from "../theme/typography.slint";
+import { Spacing } from "../theme/spacing.slint";
+import { Shapes } from "../theme/shapes.slint";
+
+export component TyuConnectionBanner inherits Rectangle {
+    in property <string> message;
+    in property <bool> connected;
+
+    height: 40px;
+    background: root.connected ? #e6f4ec : #fff1ef;
+    border-radius: Shapes.control-radius;
+
+    HorizontalLayout {
+        padding-left: Spacing.md;
+        padding-right: Spacing.md;
+        spacing: Spacing.sm;
+
+        Rectangle {
+            width: 8px;
+            height: 8px;
+            border-radius: 4px;
+            background: root.connected ? Colors.success : Colors.danger;
+        }
+
+        Text {
+            text: root.message;
+            color: Colors.text-primary;
+            font-family: Typography.ui-family;
+            font-size: Typography.body-size;
+            vertical-alignment: center;
+        }
+    }
+}
+

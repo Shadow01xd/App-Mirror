@@ -1,0 +1,28 @@
+import { Colors } from "../theme/colors.slint";
+import { Data } from "../data.slint";
+import { TyuButton } from "../components/tyu-button.slint";
+export component SessionsScreen inherits Rectangle {
+    background: transparent;
+    VerticalLayout { spacing: 24px; alignment: start;
+        HorizontalLayout { height: 42px;
+            Text { text: "Actividad"; font-size: 28px; font-weight: 600; color: Colors.text-primary; }
+            TyuButton { label: "Limpiar historial"; secondary: true; width: 160px; enabled: Data.sessions.length > 0; clicked => { Data.action("clear-history"); } }
+        }
+        Text { text: "Las conexiones de esta sesión, de más reciente a más antigua."; font-size: 13px; color: Colors.text-secondary; wrap: word-wrap; }
+        if Data.sessions.length == 0: Rectangle { height: 240px; background: Colors.stage; border-radius: 12px;
+            VerticalLayout { alignment: center; spacing: 15px;
+                Rectangle { height: 38px; background: transparent; Image { x: (parent.width - self.width) / 2; source: @image-url("../../../assets/icons/history.svg"); width: 38px; height: 38px; colorize: Colors.muted; } }
+                Text { text: "Aún no hay actividad"; font-size: 20px; color: Colors.text-primary; horizontal-alignment: center; }
+                Text { text: "Conecta un teléfono para registrar su actividad."; font-size: 13px; color: Colors.text-secondary; horizontal-alignment: center; }
+            }
+        }
+        for entry in Data.sessions: Rectangle { height: 56px;
+            background: transparent;
+            HorizontalLayout { spacing: 14px;
+                Rectangle { width: 22px; background: transparent; Image { y: (parent.height - self.height) / 2; source: @image-url("../../../assets/icons/history.svg"); width: 22px; height: 22px; colorize: Colors.accent; } }
+                Text { text: entry; font-size: 13px; color: Colors.text-primary; vertical-alignment: center; wrap: word-wrap; }
+            }
+            Rectangle { y: parent.height - 1px; height: 1px; width: parent.width; background: #292929; }
+        }
+    }
+}

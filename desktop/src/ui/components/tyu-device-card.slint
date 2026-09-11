@@ -1,0 +1,46 @@
+import { Colors } from "../theme/colors.slint";
+import { Typography } from "../theme/typography.slint";
+import { Spacing } from "../theme/spacing.slint";
+import { Shapes } from "../theme/shapes.slint";
+import { TyuStatusDot } from "tyu-status-dot.slint";
+
+export component TyuDeviceCard inherits Rectangle {
+    in property <string> device-name;
+    in property <string> status-text;
+    in property <bool> online;
+    in property <bool> selected;
+    callback clicked();
+
+    height: 72px;
+    background: root.selected ? Colors.surface-muted : Colors.surface;
+    border-width: Shapes.border-width;
+    border-color: root.selected ? Colors.accent : Colors.border;
+    border-radius: Shapes.card-radius;
+
+    HorizontalLayout {
+        padding: Spacing.lg;
+        spacing: Spacing.md;
+
+        TyuStatusDot { active: root.online; }
+
+        VerticalLayout {
+            spacing: Spacing.xs;
+            Text {
+                text: root.device-name;
+                color: Colors.text-primary;
+                font-family: Typography.ui-family;
+                font-size: Typography.body-size;
+                font-weight: 600;
+            }
+            Text {
+                text: root.status-text;
+                color: Colors.text-secondary;
+                font-family: Typography.ui-family;
+                font-size: Typography.caption-size;
+            }
+        }
+    }
+
+    TouchArea { clicked => { root.clicked(); } }
+}
+

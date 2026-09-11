@@ -1,0 +1,34 @@
+import { Colors } from "../theme/colors.slint";
+import { Motion } from "../theme/motion.slint";
+import { Data } from "../data.slint";
+export component TyuToggle inherits Rectangle {
+    in property <string> label: "Activar";
+    in property <bool> enabled: true;
+    in property <bool> in-dialog: false;
+    private property <bool> interactive: enabled && (Data.dialog == 0 || in-dialog);
+    in-out property <bool> checked;
+    callback toggled(bool);
+    width: 38px; height: 22px;
+    border-radius: 11px;
+    background: root.checked ? Colors.accent : Colors.border;
+    border-width: focus.has-focus ? 2px : 0px;
+    border-color: Colors.text-primary;
+    opacity: enabled ? 1 : 0.4;
+    forward-focus: focus;
+    accessible-role: checkbox;
+    accessible-label: label;
+    accessible-checked: checked;
+    accessible-enabled: interactive;
+    accessible-action-default => { root.flip(); }
+    function flip() { if root.interactive { root.toggled(!root.checked); } }
+    animate background { duration: Motion.standard; }
+    Rectangle {
+        width: 16px; height: 16px; y: 3px;
+        x: root.checked ? 19px : 3px;
+        border-radius: 8px;
+        background: root.checked ? Colors.accent-foreground : Colors.text-secondary;
+        animate x { duration: Motion.standard; easing: cubic-bezier(0.2, 0, 0, 1); }
+    }
+    focus := FocusScope { enabled: root.interactive; key-pressed(e) => { if e.text == " " || e.text == Key.Return { root.flip(); return accept; } reject } }
+    TouchArea { enabled: root.interactive; mouse-cursor: pointer; clicked => { focus.focus(); root.flip(); } }
+}

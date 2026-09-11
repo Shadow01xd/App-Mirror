@@ -1,0 +1,35 @@
+import { Colors } from "../theme/colors.slint";
+import { Data } from "../data.slint";
+import { TyuButton } from "tyu-button.slint";
+export component TyuSidebar inherits Rectangle {
+    in property <bool> enabled: true;
+    width: 260px; background: Colors.stage;
+    Rectangle { x: parent.width - 1px; width: 1px; height: parent.height; background: Colors.border; }
+    VerticalLayout {
+        padding: 22px; spacing: 18px;
+        Text { text: "Conexiones"; font-size: 18px; font-weight: 600; color: Colors.text-primary; height: 40px; vertical-alignment: center; }
+        if Data.connected: TyuButton {
+            label: Data.device-name; icon: @image-url("../../../assets/icons/phone.svg"); has-icon: true;
+            icon-size: 24px; align-left: true; secondary: true; selected: Data.page == 0; height: 54px;
+            clicked => { Data.option("page", 0); }
+        }
+        if Data.connected: Text { text: "Conectado · Wi-Fi"; color: Colors.success; font-size: 12px; }
+        if !Data.connected: Text { text: "Ningún teléfono conectado"; wrap: word-wrap; color: Colors.text-secondary; font-size: 13px; }
+        if !Data.connected: TyuButton {
+            label: "Conectar teléfono"; icon: @image-url("../../../assets/icons/add.svg"); has-icon: true;
+            icon-size: 22px; align-left: true; secondary: true; height: 46px;
+            clicked => { Data.option("page", 0); }
+        }
+        Rectangle { vertical-stretch: 1; background: transparent; }
+        Rectangle { height: 1px; background: Colors.border; }
+        TyuButton { label: "Actividad"; align-left: true; quiet: true; selected: Data.page == 2; icon: @image-url("../../../assets/icons/history.svg"); icon-size: 22px; has-icon: true; clicked => { Data.option("page", 2); } }
+        TyuButton { label: "Configuración"; align-left: true; quiet: true; selected: Data.page == 3; icon: @image-url("../../../assets/icons/settings.svg"); icon-size: 22px; has-icon: true; clicked => { Data.option("page", 3); } }
+        Rectangle { height: 1px; background: Colors.border; }
+        Rectangle {
+            height: 50px; background: transparent;
+            Image { x: 0px; y: 12px; width: 26px; height: 26px; source: @image-url("../../../assets/icons/desktop.svg"); colorize: Colors.text-secondary; }
+            Text { x: 40px; y: 4px; height: 24px; text: "Este equipo"; color: Colors.text-primary; font-size: 13px; vertical-alignment: center; }
+            Text { x: 40px; y: 28px; text: "TYU Desktop"; color: Colors.muted; font-size: 11px; }
+        }
+    }
+}

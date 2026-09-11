@@ -1,0 +1,11 @@
+import { Colors } from "../theme/colors.slint";
+
+export component TyuStatusDot inherits Rectangle {
+    in property <bool> active;
+
+    width: 8px;
+    height: 8px;
+    border-radius: 4px;
+    background: root.active ? Colors.success : Colors.disabled;
+}
+

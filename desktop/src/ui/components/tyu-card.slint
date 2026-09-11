@@ -1,0 +1,12 @@
+import { Colors } from "../theme/colors.slint";
+import { Shapes } from "../theme/shapes.slint";
+
+export component TyuCard inherits Rectangle {
+    in property <color> surface: Colors.surface;
+
+    background: root.surface;
+    border-width: Shapes.border-width;
+    border-color: Colors.border;
+    border-radius: Shapes.card-radius;
+}
+

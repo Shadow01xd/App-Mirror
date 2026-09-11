@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conectar con TYU</title>
+<style>
+:root {color-scheme:dark;font:16px "Segoe UI",system-ui,sans-serif;color:#f5f5f2;background:#000}
+body{margin:0;padding:32px 24px}main{max-width:440px;margin:8vh auto}header{color:#f6cc45;letter-spacing:3px;font-size:30px;font-weight:650}
+h1{font-size:28px;margin:40px 0 16px}p{color:#b0b0aa;line-height:1.6}label{display:block;margin:30px 0 10px}
+input,button{box-sizing:border-box;width:100%;min-height:50px;border-radius:8px;font:inherit;padding:12px 16px}
+input{background:#151515;border:1px solid #555;color:#f5f5f2}button{margin-top:20px;border:0;background:#f6cc45;color:#211d10;font-weight:650;cursor:pointer}
+button:disabled{opacity:.5;cursor:default}button:focus-visible,input:focus-visible{outline:2px solid #f6cc45;outline-offset:4px}
+#leave{background:#242424;color:#f5f5f2}#status{min-height:54px}[hidden]{display:none!important}
+</style>
+<main>
+<header>TYU</header><h1>Conecta con tu escritorio</h1>
+<p>Tu PC te pedirá permiso antes de conectar este teléfono.</p>
+<form id="form"><label for="name">Nombre del teléfono</label><input id="name" maxlength="48" required autocomplete="off" placeholder="Por ejemplo, mi Galaxy">
+<button id="connect">Solicitar conexión</button></form>
+<p id="status" role="status" aria-live="polite"></p><button id="leave" hidden>Desconectar</button>
+</main>
+<script>
+const token=new URL(location.href).searchParams.get('token')||'';
+const status=document.querySelector('#status'),form=document.querySelector('#form'),button=document.querySelector('#connect'),leave=document.querySelector('#leave');
+let timer;
+const endpoint=p=>p+'?token='+encodeURIComponent(token);
+const messages={pending:'Esperando a que aceptes la solicitud en tu PC…',accepted:'Conectado con tu PC. Mantén esta página abierta.',rejected:'Tu PC rechazó la solicitud. Puedes escanear el nuevo QR para volver a intentarlo.',expired:'Este QR ha caducado. Escanea el QR que aparece en tu PC.',disconnected:'La conexión ha terminado. Escanea el nuevo QR para volver a conectar.',busy:'Ya hay un teléfono conectado a este equipo.',name:'Escribe un nombre para tu teléfono.'};
+async function poll(){
+ try {
+  const r=await fetch(endpoint('/status'));if(!r.ok)throw Error();
+  const d=await r.json();status.textContent=messages[d.status]||'No se pudo comprobar la conexión.';
+  leave.hidden=d.status!=='accepted';
+  if(['pending','accepted'].includes(d.status))timer=setTimeout(poll,2000);
+ }catch{status.textContent='No se puede contactar con tu PC. Revisa el Wi-Fi.';timer=setTimeout(poll,3000)}
+}
+form.addEventListener('submit',async e=>{
+ e.preventDefault();button.disabled=true;
+ try{
+  const r=await fetch(endpoint('/request')+'&name='+encodeURIComponent(document.querySelector('#name').value),{method:'POST'});
+  const d=await r.json();status.textContent=messages[d.status]||'No se pudo enviar la solicitud.';
+  if(r.ok){form.hidden=true;poll()}else button.disabled=false;
+ }catch{status.textContent='No se puede contactar con tu PC. Comprueba que ambos están en la misma red.';button.disabled=false}
+});
+leave.onclick=async()=>{try{await fetch(endpoint('/leave'),{method:'POST'});clearTimeout(timer);leave.hidden=true;status.textContent=messages.disconnected}catch{status.textContent='No se pudo desconectar. Inténtalo otra vez.'}};
+if(!token){button.disabled=true;status.textContent='Escanea el QR que aparece en TYU Desktop.'}
+</script>
+</html>

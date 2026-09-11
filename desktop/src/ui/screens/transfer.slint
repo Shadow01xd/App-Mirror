@@ -1,0 +1,42 @@
+import { Colors } from "../theme/colors.slint";
+import { Data } from "../data.slint";
+import { TyuButton } from "../components/tyu-button.slint";
+import { TyuProgress } from "../components/tyu-progress.slint";
+export component TransferScreen inherits Rectangle {
+    background: transparent;
+    VerticalLayout { alignment: start; spacing: 24px;
+        Text { text: "Transferencias"; font-size: 28px; font-weight: 600; color: Colors.text-primary; }
+        Text { text: "Entre este equipo y " + Data.device-name; font-size: 13px; color: Colors.text-secondary; }
+        Rectangle { height: 150px; border-width: 1px; border-color: Colors.border; border-radius: 12px; background: Colors.stage;
+            VerticalLayout { alignment: center; padding: 20px; spacing: 12px;
+                Image { source: @image-url("../../../assets/icons/send.svg"); width: 30px; height: 30px; colorize: Colors.accent; }
+                Text { text: "Prueba un envío de archivos"; color: Colors.text-primary; font-size: 18px; font-weight: 600; horizontal-alignment: center; }
+                Text { text: "La demostración usa foto.jpg, video.mp4 y documento.pdf. No accede a tus archivos."; color: Colors.text-secondary; font-size: 12px; horizontal-alignment: center; wrap: word-wrap; }
+            }
+        }
+        HorizontalLayout { height: 42px; spacing: 12px;
+            TyuButton { label: "Añadir ejemplos"; has-icon: true; icon: @image-url("../../../assets/icons/add.svg"); secondary: true; enabled: !Data.transfer-running; clicked => { Data.action("add-files"); } }
+            TyuButton { label: Data.transfer-running ? (Data.transfer-paused ? "Reanudar" : "Pausar") : "Enviar archivos"; enabled: Data.connected && Data.files.length > 0; clicked => { Data.action("transfer"); } }
+            TyuButton { label: "Cancelar"; secondary: true; enabled: Data.transfer-running; clicked => { Data.action("cancel-transfer"); } }
+        }
+        if !Data.connected: Text { text: "Conecta un dispositivo para enviar archivos."; font-size: 13px; color: Colors.warning; }
+        HorizontalLayout { height: 24px;
+            Text { text: "Archivo"; font-size: 12px; color: Colors.muted; }
+            Text { text: "Estado"; font-size: 12px; color: Colors.muted; horizontal-alignment: right; }
+        }
+        for file in Data.files: Rectangle { height: 82px; background: transparent;
+            VerticalLayout { spacing: 12px;
+                HorizontalLayout { spacing: 16px;
+                    Image { source: @image-url("../../../assets/icons/folder.svg"); width: 22px; height: 22px; colorize: Colors.text-secondary; }
+                    VerticalLayout { spacing: 3px;
+                        Text { text: file.name; font-size: 14px; color: Colors.text-primary; }
+                        Text { text: file.size; font-size: 11px; color: Colors.muted; }
+                    }
+                    Text { text: file.status; font-size: 12px; color: file.progress >= 1 ? Colors.success : Colors.text-secondary; horizontal-alignment: right; vertical-alignment: center; }
+                }
+                TyuProgress { value: file.progress; }
+            }
+        }
+        if Data.files.length == 0: Text { text: "No hay archivos en la cola."; font-size: 14px; color: Colors.text-secondary; }
+    }
+}

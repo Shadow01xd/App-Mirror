@@ -1,0 +1,29 @@
+import { Colors } from "../theme/colors.slint";
+import { Data } from "../data.slint";
+import { TyuToggle } from "../components/tyu-toggle.slint";
+export component SettingsScreen inherits Rectangle {
+    background: transparent;
+    VerticalLayout { spacing: 26px; alignment: start;
+        Text { text: "Configuración"; font-size: 28px; font-weight: 600; color: Colors.text-primary; }
+        Text { text: "Preferencias de esta sesión de escritorio."; font-size: 13px; color: Colors.text-secondary; }
+        Rectangle { height: 1px; background: Colors.border; }
+        HorizontalLayout { height: 70px; spacing: 24px;
+            VerticalLayout { spacing: 6px;
+                Text { text: "Reducir animaciones"; font-size: 16px; font-weight: 600; color: Colors.text-primary; }
+                Text { text: "Elimina el recorrido de la señal y las transiciones de controles."; font-size: 13px; color: Colors.text-secondary; wrap: word-wrap; }
+            }
+            TyuToggle { label: "Reducir animaciones"; checked: Data.reduced-motion; toggled(v) => { Data.toggle("motion", v); } }
+        }
+        Rectangle { height: 1px; background: Colors.border; }
+        HorizontalLayout { height: 70px; spacing: 24px;
+            VerticalLayout { spacing: 6px;
+                Text { text: "Avisos dentro de la app"; font-size: 16px; font-weight: 600; color: Colors.text-primary; }
+                Text { text: "Muestra los avisos de conexión y actividad."; font-size: 13px; color: Colors.text-secondary; wrap: word-wrap; }
+            }
+            TyuToggle { label: "Avisos dentro de la app"; checked: Data.notifications; toggled(v) => { Data.toggle("notifications", v); } }
+        }
+        Rectangle { height: 1px; background: Colors.border; }
+        Text { text: "Acerca de TYU Desktop"; font-size: 18px; font-weight: 600; color: Colors.text-primary; }
+        Text { text: "TYU Desktop · 0.1.0\n\nVincula tu teléfono mediante QR en la misma red local. Las preferencias se mantienen mientras la aplicación está abierta."; font-size: 13px; color: Colors.text-secondary; wrap: word-wrap; }
+    }
+}

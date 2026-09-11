@@ -1,0 +1,22 @@
+import { Colors } from "../theme/colors.slint";
+import { Data } from "../data.slint";
+import { TyuButton } from "../components/tyu-button.slint";
+export component DeviceDetailsScreen inherits Rectangle {
+    background: transparent;
+    VerticalLayout { alignment: start; spacing: 24px;
+        Text { text: "Detalles de conexión"; font-size: 28px; font-weight: 600; color: Colors.text-primary; }
+        Text { text: Data.device-name; font-size: 18px; color: Colors.text-secondary; }
+        for row in [
+            { label: "Estado", value: Data.connected ? "Conectado" : "Desconectado" },
+            { label: "Transporte", value: Data.connected ? "Wi-Fi · red local" : "No disponible" },
+            { label: "Sesión", value: Data.active ? "Activa · " + Data.elapsed : "Sin sesión activa" }
+        ]: Rectangle { height: 62px;
+            HorizontalLayout {
+                Text { text: row.label; font-size: 13px; color: Colors.text-secondary; vertical-alignment: center; }
+                Text { text: row.value; font-size: 13px; color: Colors.text-primary; horizontal-alignment: right; vertical-alignment: center; }
+            }
+            Rectangle { height: 1px; y: parent.height - 1px; width: parent.width; background: Colors.border; }
+        }
+        TyuButton { label: "Volver al dispositivo"; secondary: true; clicked => { Data.option("page", 0); } }
+    }
+}

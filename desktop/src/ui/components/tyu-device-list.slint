@@ -1,0 +1,27 @@
+import { Spacing } from "../theme/spacing.slint";
+import { TyuDeviceCard } from "tyu-device-card.slint";
+
+export struct DeviceListItem {
+    name: string,
+    status: string,
+    online: bool,
+}
+
+export component TyuDeviceList inherits Rectangle {
+    in property <[DeviceListItem]> devices;
+    callback selected(int);
+
+    background: transparent;
+
+    VerticalLayout {
+        spacing: Spacing.sm;
+
+        for device[index] in root.devices : TyuDeviceCard {
+            device-name: device.name;
+            status-text: device.status;
+            online: device.online;
+            clicked => { root.selected(index); }
+        }
+    }
+}
+

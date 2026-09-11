@@ -1,0 +1,63 @@
+import { Colors } from "../theme/colors.slint";
+import { Motion } from "../theme/motion.slint";
+import { Data } from "../data.slint";
+export component TyuDeviceStage inherits Rectangle {
+    in property <int> mode: Data.mode;
+    in property <bool> linked: Data.connected;
+    in property <bool> active: Data.active;
+    private property <float> trace: 1;
+    private property <bool> transition: true;
+    changed mode => { root.transition = false; root.trace = 0; restart.start(); }
+    restart := Timer {
+        interval: 16ms;
+        triggered => { root.transition = true; root.trace = 1; self.stop(); }
+    }
+    animate trace { duration: root.transition ? Motion.link : 0ms; easing: cubic-bezier(0.65, 0, 0.35, 1); }
+    height: 330px;
+    background: Colors.stage;
+    border-radius: 12px;
+    // A bounded 16:9 display and a portrait phone, independent of window aspect ratio.
+    scene := Rectangle {
+        width: min(root.width - 64px, 760px);
+        height: 280px;
+        transform-scale-x: min(1, (root.height - 24px) / 280px);
+        transform-scale-y: min(1, (root.height - 24px) / 280px);
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2;
+        background: transparent;
+        pc := Rectangle {
+            x: 0px; y: 18px;
+            width: min(scene.width * 0.57, 360px);
+            height: self.width * 9 / 16;
+            background: Colors.surface-muted;
+            border-radius: 8px;
+            border-width: 1px; border-color: #555550;
+            Rectangle { x: 6px; y: 6px; width: parent.width - 12px; height: parent.height - 12px; border-radius: 3px; background: Colors.background; }
+            Rectangle { x: parent.width / 2 - 3px; y: parent.height; width: 6px; height: 25px; background: #858580; }
+            Rectangle { x: parent.width / 2 - 44px; y: parent.height + 24px; width: 88px; height: 3px; border-radius: 2px; background: #b0b0aa; }
+        }
+        phone := Rectangle {
+            x: scene.width - 90px; y: 18px;
+            width: 90px; height: 184px;
+            background: Colors.surface-muted; border-radius: 15px;
+            border-width: 1px; border-color: #b0b0aa;
+            Rectangle { x: 5px; y: 5px; width: parent.width - 10px; height: parent.height - 10px; background: Colors.background; border-radius: 11px; }
+            Rectangle { x: 30px; y: 9px; width: 30px; height: 3px; border-radius: 2px; background: #686862; }
+            Rectangle { x: 30px; y: parent.height - 11px; width: 30px; height: 3px; border-radius: 2px; background: Colors.accent; }
+        }
+        wire := Rectangle {
+            x: pc.width + 20px; y: 106px;
+            width: phone.x - self.x - 20px; height: 2px; background: Colors.border;
+            Rectangle {
+                width: parent.width * root.trace;
+                height: 2px;
+                x: root.mode == 1 ? parent.width - self.width : 0px;
+                background: root.linked ? Colors.accent : Colors.muted;
+            }
+            Rectangle { x: -3px; y: -3px; width: 8px; height: 8px; border-radius: 4px; background: root.mode == 1 ? Colors.stage : Colors.accent; border-width: 1px; border-color: Colors.accent; }
+            Rectangle { x: parent.width - 5px; y: -3px; width: 8px; height: 8px; border-radius: 4px; background: root.mode == 0 ? Colors.stage : Colors.accent; border-width: 1px; border-color: Colors.accent; }
+        }
+        Text { x: 0px; y: 256px; width: pc.width; text: "Este equipo"; horizontal-alignment: center; color: Colors.text-secondary; font-size: 12px; }
+        Text { x: phone.x - 55px; y: 256px; width: 200px; text: Data.device-name; horizontal-alignment: center; overflow: elide; color: Colors.text-secondary; font-size: 12px; }
+    }
+}

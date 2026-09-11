@@ -1,0 +1,31 @@
+import { Colors } from "../theme/colors.slint";
+import { Shapes } from "../theme/shapes.slint";
+
+export component TyuIconButton inherits Rectangle {
+    in property <image> icon;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    width: 40px;
+    height: 40px;
+    border-radius: Shapes.control-radius;
+    border-width: Shapes.border-width;
+    border-color: Colors.border;
+    background: Colors.surface;
+
+    Image {
+        source: root.icon;
+        width: 20px;
+        height: 20px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        image-fit: contain;
+        opacity: root.enabled ? 1 : 0.45;
+    }
+
+    TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+

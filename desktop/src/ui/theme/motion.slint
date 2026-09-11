@@ -1,0 +1,7 @@
+export global Motion {
+    in-out property <bool> reduced: false;
+    out property <duration> fast: reduced ? 0ms : 140ms;
+    out property <duration> standard: reduced ? 0ms : 220ms;
+    out property <duration> navigate: reduced ? 0ms : 280ms;
+    out property <duration> link: reduced ? 0ms : 650ms;
+}
