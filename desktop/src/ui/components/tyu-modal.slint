@@ -1,27 +1,42 @@
 import { Colors } from "../theme/colors.slint";
+import { Typography } from "../theme/typography.slint";
+import { Spacing } from "../theme/spacing.slint";
+import { Shapes } from "../theme/shapes.slint";
+import { Motion } from "../theme/motion.slint";
 import { Data } from "../data.slint";
 import { TyuButton } from "tyu-button.slint";
 export component TyuModal inherits Rectangle {
+    private property <float> enter: 0;
+    private property <bool> animate-enter: false;
+    init => { entrance-timer.start(); }
+    entrance-timer := Timer { interval: 16ms; triggered => { root.animate-enter = true; root.enter = 1; self.stop(); } }
+    animate enter { duration: root.animate-enter ? Motion.standard : 0ms; easing: cubic-bezier(0.2, 0, 0, 1); }
     background: #000000b3;
+    opacity: root.enter;
     TouchArea {}
     focus := FocusScope {
         init => { self.focus(); }
         key-pressed(e) => { if e.text == Key.Escape { Data.action("reject-pair"); return accept; } reject }
         Rectangle {
-            width: min(480px, parent.width - 60px); height: 310px;
+            width: min(460px, parent.width - 60px); height: 268px;
             x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
-            background: Colors.surface; border-radius: 14px; border-width: 1px; border-color: Colors.border;
+            background: Colors.surface; border-radius: Shapes.modal-radius; border-width: Shapes.border-width; border-color: Colors.border;
+            transform-scale-x: 0.96 + root.enter * 0.04;
+            transform-scale-y: 0.96 + root.enter * 0.04;
             VerticalLayout {
-                padding: 30px; spacing: 22px; alignment: start;
-                Rectangle {
-                    height: 32px; background: transparent;
-                    Image { x: 0px; width: 28px; height: 28px; y: 2px; source: @image-url("../../../assets/icons/phone.svg"); colorize: Colors.accent; }
-                    Text { x: 42px; height: 32px; text: "Solicitud de conexión"; font-size: 23px; font-weight: 600; color: Colors.text-primary; vertical-alignment: center; }
-                }
-                Text { text: Data.pending-name + " se quiere conectar a este equipo."; color: Colors.text-primary; font-size: 17px; wrap: word-wrap; }
-                Text { text: "¿Permitir la conexión? Acepta solo si reconoces este teléfono."; color: Colors.text-secondary; font-size: 13px; wrap: word-wrap; }
+                padding: Spacing.xl; spacing: Spacing.lg; alignment: start;
                 HorizontalLayout {
-                    spacing: 12px;
+                    spacing: Spacing.md;
+                    Rectangle {
+                        width: 44px; height: 44px; border-radius: 22px; background: Colors.primary-surface;
+                        Image { width: 22px; height: 22px; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; source: @image-url("../../../assets/icons/phone.svg"); colorize: Colors.accent; }
+                    }
+                    Text { text: "Solicitud de conexión"; font-size: Typography.title-size; font-weight: 600; color: Colors.text-primary; vertical-alignment: center; }
+                }
+                Text { text: Data.pending-name + " se quiere conectar a este equipo."; color: Colors.text-primary; font-size: Typography.heading-size; wrap: word-wrap; }
+                Text { text: "Acepta solo si reconoces este teléfono."; color: Colors.text-secondary; font-size: Typography.body-size; wrap: word-wrap; }
+                HorizontalLayout {
+                    spacing: Spacing.md;
                     TyuButton { in-dialog: true; label: "Rechazar"; secondary: true; icon: @image-url("../../../assets/icons/close.svg"); has-icon: true; clicked => { Data.action("reject-pair"); } }
                     TyuButton { in-dialog: true; label: "Aceptar"; icon: @image-url("../../../assets/icons/check.svg"); has-icon: true; clicked => { Data.action("accept-pair"); } }
                 }

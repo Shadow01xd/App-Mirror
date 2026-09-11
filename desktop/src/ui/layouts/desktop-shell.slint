@@ -6,6 +6,7 @@ import { Data } from "../data.slint";
 import { TyuSidebar } from "../components/tyu-sidebar.slint";
 import { TyuButton } from "../components/tyu-button.slint";
 import { TyuModal } from "../components/tyu-modal.slint";
+import { TyuStatusDot } from "../components/tyu-status-dot.slint";
 import { HomeScreen } from "../screens/home.slint";
 import { SessionsScreen } from "../screens/sessions.slint";
 import { SettingsScreen } from "../screens/settings.slint";
@@ -50,7 +51,9 @@ export component DesktopShell inherits Window {
         }
         Rectangle { height: 33px; background: Colors.stage;
             HorizontalLayout { padding-left: 23px; padding-right: 23px; spacing: 12px;
-                Rectangle { width: 5px; height: 5px; border-radius: 3px; background: Colors.accent; }
+                Rectangle { width: 6px;
+                    TyuStatusDot { active: Data.connected; size: 6px; y: (parent.height - self.height) / 2; }
+                }
                 Text { text: Data.connected ? "Conectado por Wi-Fi" : "Esperando un teléfono"; font-size: 11px; color: Colors.text-secondary; vertical-alignment: center; }
                 Text { text: Data.active ? "Sesión  " + Data.elapsed : "TYU Desktop"; font-size: 10px; color: Colors.muted; horizontal-alignment: right; vertical-alignment: center; }
             }

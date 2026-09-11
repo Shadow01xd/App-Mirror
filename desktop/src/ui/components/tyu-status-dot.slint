@@ -1,11 +1,14 @@
 import { Colors } from "../theme/colors.slint";
+import { Motion } from "../theme/motion.slint";
 
 export component TyuStatusDot inherits Rectangle {
     in property <bool> active;
+    in property <length> size: 8px;
 
-    width: 8px;
-    height: 8px;
-    border-radius: 4px;
+    width: size;
+    height: size;
+    border-radius: size / 2;
     background: root.active ? Colors.success : Colors.disabled;
+    animate background { duration: Motion.standard; }
 }
 
