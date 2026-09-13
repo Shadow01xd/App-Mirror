@@ -17,12 +17,13 @@ import com.tyu.app.feature.home.components.FeatureGrid
 
 @Composable
 fun BypassScreen(computer: String, cameraActive: Boolean, microphoneActive: Boolean,
-    storageEnabled: Boolean, onFeature: (UiFeature) -> Unit, onBack: () -> Unit) {
+    storageEnabled: Boolean, onFeature: (UiFeature) -> Unit, onBack: () -> Unit,
+    status: String = "Conexión de servicios activa") {
     TyuPage(onBack = onBack) {
         TyuConnectionBanner(computer)
         TyuHeading("Bypass", "Conecta ambos dispositivos sin compartir ni extender pantallas.")
         TyuDirectionStrip("teléfono", "PC", bidirectional = true)
-        TyuStatusDot("Conexión de servicios activa")
+        TyuStatusDot(status)
         TyuSectionTitle("TUS SERVICIOS")
         FeatureGrid(cameraActive, microphoneActive, storageEnabled, onFeature)
         TyuFootnote("Solo lo que necesitas. Ninguna pantalla compartida.")

@@ -148,59 +148,92 @@ pub fn run() -> Result<(), slint::PlatformError> {
         .global::<Data>()
         .on_matches(|text, query| text.to_lowercase().contains(&query.to_lowercase()));
     let state = Rc::new(RefCell::new(AppState::desktop()));
-    let pairing = match crate::pairing::PairingServer::start() {
-        Ok(server) => Some(Rc::new(server)),
-        Err(error) => {
-            window
-                .global::<Data>()
-                .set_pairing_error(format!("No se pudo iniciar la conexión local: {error}").into());
-            None
+    let args: Vec<String> = std::env::args().collect();
+    let legacy = args
+        .iter()
+        .any(|a| matches!(a.as_str(), "--legacy-pairing" | "--view" | "--smoke"));
+    let backend = if !legacy {
+        match crate::backend::core_bridge::CoreBridge::start() {
+            Ok(bridge) => Some(Rc::new(RefCell::new(bridge))),
+            Err(error) => {
+                window
+                    .global::<Data>()
+                    .set_pairing_error(format!("No se pudo iniciar TYU Core: {error}").into());
+                None
+            }
         }
+    } else {
+        None
+    };
+    if !legacy {
+        window.global::<Data>().set_pairing_instructions("En Android, selecciona este equipo en la búsqueda o escanea el QR. Ambos deben estar en la misma red Wi-Fi. Después acepta la solicitud aquí.".into());
+    }
+    let pairing = if legacy {
+        match crate::pairing::PairingServer::start() {
+            Ok(server) => Some(Rc::new(server)),
+            Err(error) => {
+                window.global::<Data>().set_pairing_error(
+                    format!("No se pudo iniciar la conexión local: {error}").into(),
+                );
+                None
+            }
+        }
+    } else {
+        None
     };
     if let Some(server) = &pairing {
         sync_pairing(&window, &mut state.borrow_mut(), server);
     }
-    let args: Vec<String> = std::env::args().collect();
     // Reproducible native screenshots. Only enabled by explicit developer CLI arguments.
-    if let Some(index) = args.iter().position(|a| a == "--view") {
-        if let Some(view) = args.get(index + 1) {
-            let mut s = state.borrow_mut();
-            // Fixtures are opt-in captures only, never the normal startup state.
-            if matches!(view.as_str(), "connected" | "mirror" | "bypass" | "active") {
-                s.connect_peer("Mi teléfono".into(), "screenshot-fixture".into());
-            }
-            match view.as_str() {
-                "mirror" => s.option("mode", 1),
-                "bypass" => s.option("mode", 2),
-                "active" => s.action("session"),
-                "disconnected" => s.disconnect(),
-                "settings" => s.option("page", 3),
-                "activity" => {
-                    s.action("session");
-                    s.action("session");
-                    s.option("page", 2);
-                }
-                "pairing" => {
-                    if let Some(server) = &pairing {
-                        let mut hub = server.state.lock().unwrap();
-                        let ticket = hub.ticket.clone();
-                        let _ = hub.request(&ticket, "Mi teléfono");
-                        s.pending_name = "Mi teléfono".into();
-                        s.dialog = 2;
-                    }
-                }
-                "camera" => s.option("service", 0),
-                _ => {}
-            }
-            s.notice.clear();
+    if let Some(index) = args.iter().position(|a| a == "--view")
+        && let Some(view) = args.get(index + 1)
+    {
+        let mut s = state.borrow_mut();
+        // Fixtures are opt-in captures only, never the normal startup state.
+        if matches!(view.as_str(), "connected" | "mirror" | "bypass" | "active") {
+            s.connect_peer("Mi teléfono".into(), "screenshot-fixture".into());
         }
+        match view.as_str() {
+            "mirror" => s.option("mode", 1),
+            "bypass" => s.option("mode", 2),
+            "active" => s.action("session"),
+            "disconnected" => s.disconnect(),
+            "settings" => s.option("page", 3),
+            "activity" => {
+                s.action("session");
+                s.action("session");
+                s.option("page", 2);
+            }
+            "pairing" => {
+                if let Some(server) = &pairing {
+                    let mut hub = server.state.lock().unwrap();
+                    let ticket = hub.ticket.clone();
+                    let _ = hub.request(&ticket, "Mi teléfono");
+                    s.pending_name = "Mi teléfono".into();
+                    s.dialog = 2;
+                }
+            }
+            "camera" => s.option("service", 0),
+            _ => {}
+        }
+        s.notice.clear();
     }
     sync(&window, &state.borrow());
     {
         let weak = window.as_weak();
         let state = state.clone();
         let pairing = pairing.clone();
+        let backend = backend.clone();
         window.global::<Data>().on_action(move |command| {
+            if let Some(backend) = &backend {
+                backend
+                    .borrow_mut()
+                    .action(command.as_str(), &mut state.borrow_mut());
+                if let Some(window) = weak.upgrade() {
+                    sync(&window, &state.borrow());
+                }
+                return;
+            }
             match command.as_str() {
                 "accept-pair" | "reject-pair" | "close-dialog" => {
                     if let Some(server) = &pairing {
@@ -212,10 +245,10 @@ pub fn run() -> Result<(), slint::PlatformError> {
                         let mut state = state.borrow_mut();
                         state.dialog = 0;
                         state.pending_name.clear();
-                        if command == "accept-pair" {
-                            if let Some(peer) = peer {
-                                state.connect_peer(peer.name, peer.token);
-                            }
+                        if command == "accept-pair"
+                            && let Some(peer) = peer
+                        {
+                            state.connect_peer(peer.name, peer.token);
                         }
                     }
                 }
@@ -238,8 +271,15 @@ pub fn run() -> Result<(), slint::PlatformError> {
     {
         let weak = window.as_weak();
         let state = state.clone();
+        let backend = backend.clone();
         window.global::<Data>().on_option(move |key, value| {
-            state.borrow_mut().option(key.as_str(), value);
+            if let Some(backend) = &backend {
+                backend
+                    .borrow_mut()
+                    .option(key.as_str(), value, &mut state.borrow_mut());
+            } else {
+                state.borrow_mut().option(key.as_str(), value);
+            }
             if let Some(window) = weak.upgrade() {
                 sync(&window, &state.borrow());
             }
@@ -248,8 +288,15 @@ pub fn run() -> Result<(), slint::PlatformError> {
     {
         let weak = window.as_weak();
         let state = state.clone();
+        let backend = backend.clone();
         window.global::<Data>().on_toggle(move |key, value| {
-            state.borrow_mut().toggle(key.as_str(), value);
+            if let Some(backend) = &backend {
+                backend
+                    .borrow_mut()
+                    .toggle(key.as_str(), value, &mut state.borrow_mut());
+            } else {
+                state.borrow_mut().toggle(key.as_str(), value);
+            }
             if let Some(window) = weak.upgrade() {
                 sync(&window, &state.borrow());
             }
@@ -309,53 +356,56 @@ pub fn run() -> Result<(), slint::PlatformError> {
         slint::TimerMode::Repeated,
         Duration::from_millis(100),
         move || {
-            state.borrow_mut().tick();
+            if legacy {
+                state.borrow_mut().tick();
+            }
             if let Some(window) = weak.upgrade() {
-                if !fixture {
-                    if let Some(server) = &pairing {
-                        sync_pairing(&window, &mut state.borrow_mut(), server);
-                    }
+                if let Some(backend) = &backend {
+                    backend.borrow_mut().poll(&mut state.borrow_mut(), &window);
+                }
+                if !fixture && let Some(server) = &pairing {
+                    sync_pairing(&window, &mut state.borrow_mut(), server);
                 }
                 sync(&window, &state.borrow());
             }
         },
     );
-    if let Some(index) = args.iter().position(|a| a == "--screenshot") {
-        if let Some(path) = args.get(index + 1) {
-            let path = path.clone();
-            let width = args
-                .iter()
-                .position(|a| a == "--width")
-                .and_then(|i| args.get(i + 1))
-                .and_then(|s| s.parse::<u32>().ok())
-                .unwrap_or(1260);
-            let height = args
-                .iter()
-                .position(|a| a == "--height")
-                .and_then(|i| args.get(i + 1))
-                .and_then(|s| s.parse::<u32>().ok())
-                .unwrap_or(920);
-            window
-                .window()
-                .set_size(slint::LogicalSize::new(width as f32, height as f32));
-            let weak = window.as_weak();
-            slint::Timer::single_shot(Duration::from_millis(1300), move || {
-                let Some(window) = weak.upgrade() else {
-                    return;
-                };
-                let buffer = window.window().take_snapshot().expect("snapshot failed");
-                image::save_buffer(
-                    &path,
-                    buffer.as_bytes(),
-                    buffer.width(),
-                    buffer.height(),
-                    image::ColorType::Rgba8,
-                )
-                .expect("save screenshot");
-                println!("Screenshot: {}", path);
-                slint::quit_event_loop().expect("quit");
-            });
-        }
+    if let Some(index) = args.iter().position(|a| a == "--screenshot")
+        && let Some(path) = args.get(index + 1)
+    {
+        let path = path.clone();
+        let width = args
+            .iter()
+            .position(|a| a == "--width")
+            .and_then(|i| args.get(i + 1))
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(1260);
+        let height = args
+            .iter()
+            .position(|a| a == "--height")
+            .and_then(|i| args.get(i + 1))
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(920);
+        window
+            .window()
+            .set_size(slint::LogicalSize::new(width as f32, height as f32));
+        let weak = window.as_weak();
+        slint::Timer::single_shot(Duration::from_millis(1300), move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let buffer = window.window().take_snapshot().expect("snapshot failed");
+            image::save_buffer(
+                &path,
+                buffer.as_bytes(),
+                buffer.width(),
+                buffer.height(),
+                image::ColorType::Rgba8,
+            )
+            .expect("save screenshot");
+            println!("Screenshot: {}", path);
+            slint::quit_event_loop().expect("quit");
+        });
     }
     window.run()
 }

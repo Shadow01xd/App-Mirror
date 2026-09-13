@@ -13,7 +13,8 @@ import com.tyu.app.ui.theme.*
 
 @Composable
 fun DeviceScreen(state: DeviceUiState, onForget: () -> Unit, onStorage: (Boolean) -> Unit,
-    onCamera: (Boolean) -> Unit, onMicrophone: (Boolean) -> Unit, onBack: () -> Unit) {
+    onCamera: (Boolean) -> Unit, onMicrophone: (Boolean) -> Unit, onBack: () -> Unit,
+    onDisconnect: (() -> Unit)? = null) {
     var confirm by rememberSaveable { mutableStateOf(false) }
     TyuPage(onBack = onBack) {
         TyuHeading(state.device.name, "Un equipo en tu espacio TYU.")
@@ -35,8 +36,10 @@ fun DeviceScreen(state: DeviceUiState, onForget: () -> Unit, onStorage: (Boolean
             TyuToggle("Micrófono", "Micrófono TYU", state.microphoneAllowed, onMicrophone, MicrophoneIcon)
         }
         TyuSecondaryButton("Olvidar dispositivo", { confirm = true }, Modifier.fillMaxWidth(), TyuIcons.Close)
+        if (onDisconnect != null) TyuSecondaryButton("Desconectar", onDisconnect, Modifier.fillMaxWidth())
     }
     if (confirm) TyuDialog("¿Olvidar ${state.device.name}?",
-        "Se cerrarán las sesiones de esta demostración. Podrás volver a agregar el equipo.",
+        if (onDisconnect == null) "Se cerrarán las sesiones de esta demostración. Podrás volver a agregar el equipo."
+        else "Se cerrará la conexión y se revocará la confianza en este equipo.",
         "Olvidar", { confirm = false; onForget() }, { confirm = false })
 }

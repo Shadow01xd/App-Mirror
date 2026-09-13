@@ -1,0 +1,13 @@
+[package]
+name = "tyu-protocol"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+tyu-types.workspace = true
+serde.workspace = true
+postcard.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+uuid.workspace = true

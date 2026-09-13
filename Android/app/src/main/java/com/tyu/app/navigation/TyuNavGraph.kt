@@ -25,7 +25,7 @@ import com.tyu.app.model.*
 import kotlinx.coroutines.delay
 
 @Composable
-fun TyuNavGraph() {
+fun TyuFixtureNavGraph() {
     val app = rememberSaveable(saver = MockAppState.Saver) { MockAppState() }
     var route by rememberSaveable { mutableStateOf(TyuRoute.Welcome) }
     var history by rememberSaveable { mutableStateOf(listOf<String>()) }

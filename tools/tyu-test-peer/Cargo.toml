@@ -1,0 +1,10 @@
+[package]
+name = "tyu-test-peer"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+tyu-core.workspace = true
+tokio.workspace = true
+tracing-subscriber.workspace = true
+directories.workspace = true
+crossterm = "0.29"

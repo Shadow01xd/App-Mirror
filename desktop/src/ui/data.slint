@@ -31,6 +31,7 @@ export global Data {
     in-out property <bool> notifications: true;
     in-out property <bool> transfer-running: false;
     in-out property <bool> transfer-paused: false;
+    in-out property <string> pairing-instructions: "Usa la cámara de tu teléfono y abre el enlace. Ambos equipos deben estar en la misma red Wi-Fi.";
     callback action(string);
     callback option(string, int);
     callback toggle(string, bool);

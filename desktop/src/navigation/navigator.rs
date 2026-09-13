@@ -1,18 +1,9 @@
 use super::Route;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Navigator {
     current: Route,
     history: Vec<Route>,
-}
-
-impl Default for Navigator {
-    fn default() -> Self {
-        Self {
-            current: Route::default(),
-            history: Vec::new(),
-        }
-    }
 }
 
 impl Navigator {

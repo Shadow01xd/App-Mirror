@@ -20,6 +20,13 @@ export component TyuSidebar inherits Rectangle {
             icon-size: 22px; align-left: true; secondary: true; height: 46px;
             clicked => { Data.option("page", 0); }
         }
+        if !Data.connected: VerticalLayout {
+            spacing: 8px;
+            for device[index] in Data.devices: TyuButton {
+                label: device.name; align-left: true; secondary: true; height: 46px;
+                clicked => { Data.option("device", index); Data.action("connect"); }
+            }
+        }
         Rectangle { vertical-stretch: 1; background: transparent; }
         Rectangle { height: 1px; background: Colors.border; }
         TyuButton { label: "Actividad"; align-left: true; quiet: true; selected: Data.page == 2; icon: @image-url("../../../assets/icons/history.svg"); icon-size: 22px; has-icon: true; clicked => { Data.option("page", 2); } }

@@ -16,13 +16,14 @@ import com.tyu.app.model.UiDevice
 
 @Composable
 fun NearbyScreen(state: NearbyUiState, onSearch: () -> Unit, onPair: (UiDevice) -> Unit,
-    onQr: () -> Unit, onBack: () -> Unit, onSettings: () -> Unit) {
+    onQr: () -> Unit, onBack: () -> Unit, onSettings: () -> Unit,
+    devices: List<UiDevice> = MockDevices.nearby) {
     TyuPage(onBack = onBack, onSettings = onSettings, spread = state != NearbyUiState.Found) {
         if (state == NearbyUiState.Found) {
             TyuHeading("Tu próximo enlace", "Elige el equipo que quieres conectar.")
             Surface(Modifier.fillMaxWidth().tyuEnter(), color = TyuColors.Surface, shape = TyuShapes.Card) {
                 Column {
-                    MockDevices.nearby.forEachIndexed { index, device ->
+                    devices.forEachIndexed { index, device ->
                         if (index > 0) HorizontalDivider(color = TyuColors.Border)
                         TyuDeviceRow(device) { onPair(device) }
                     }

@@ -16,7 +16,8 @@ import com.tyu.app.model.UiDevice
 
 @Composable
 fun PairingScreen(state: PairingUiState, device: UiDevice, onContinue: () -> Unit,
-    onCancel: () -> Unit) {
+    onCancel: () -> Unit, native: Boolean = false,
+    onScan: () -> Unit = {}, error: String? = null) {
     TyuPage(onBack = onCancel, spread = true) {
         when (state) {
             PairingUiState.Qr -> {
@@ -30,19 +31,23 @@ fun PairingScreen(state: PairingUiState, device: UiDevice, onContinue: () -> Uni
                     }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(TyuDimens.Gap)) {
-                    TyuFootnote("Vista previa del escáner · cámara desactivada")
-                    TyuButton("Continuar", onContinue, Modifier.fillMaxWidth(), TyuIcons.Arrow)
+                    if (native) {
+                        TyuButton("Escanear QR", onScan, Modifier.fillMaxWidth(), TyuIcons.Qr)
+                        TyuFootnote("Escanea el QR y acepta la solicitud que aparecerá en tu PC.")
+                    } else TyuFootnote("Vista previa del escáner · cámara desactivada")
+                    if (!native) TyuButton("Continuar", onContinue, Modifier.fillMaxWidth(), TyuIcons.Arrow)
                     TyuSecondaryButton("Cancelar", onCancel, Modifier.fillMaxWidth())
                 }
             }
             PairingUiState.Connecting -> {
                 TyuHero(TyuIcons.Devices, "Creando el enlace", "Conectando con ${device.computerName}…")
                 TyuProgressBar(null)
+                if (native) TyuFootnote("Acepta la solicitud de conexión en tu PC.")
                 TyuSecondaryButton("Cancelar", onCancel, Modifier.fillMaxWidth())
             }
             PairingUiState.Error -> {
                 TyuHero(TyuIcons.Desktop, "No pudimos conectar",
-                    "No se pudo conectar con ${device.name}.", error = true)
+                    error ?: "No se pudo conectar con ${device.name}.", error = true)
                 TyuStatusDot("Conexión interrumpida", active = false, error = true)
                 Column(verticalArrangement = Arrangement.spacedBy(TyuDimens.Gap)) {
                     TyuButton("Reintentar", onContinue, Modifier.fillMaxWidth(), TyuIcons.Refresh)

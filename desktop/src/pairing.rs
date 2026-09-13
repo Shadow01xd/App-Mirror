@@ -1,4 +1,6 @@
-//! LAN pairing only. A phone must request access and the desktop must approve it.
+//! Legacy HTTP development fallback, enabled by --legacy-pairing or explicit UI fixtures.
+//! This does not authenticate a TyuLink peer or grant access to Core services.
+//! A phone must request access and the desktop must approve it.
 //! No capture, file access or screen transport is exposed by this server.
 use std::{
     collections::VecDeque,
@@ -254,10 +256,10 @@ impl Drop for PairingServer {
     fn drop(&mut self) {
         self.stopping.store(true, Ordering::Relaxed);
         // Do not hold up the UI if an incomplete client request is still being read.
-        if self.worker.as_ref().is_some_and(|w| w.is_finished()) {
-            if let Some(worker) = self.worker.take() {
-                let _ = worker.join();
-            }
+        if self.worker.as_ref().is_some_and(|w| w.is_finished())
+            && let Some(worker) = self.worker.take()
+        {
+            let _ = worker.join();
         }
     }
 }

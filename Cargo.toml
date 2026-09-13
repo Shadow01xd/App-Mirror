@@ -1,0 +1,33 @@
+[workspace]
+resolver = "3"
+members = ["desktop", "core/tyu-types", "core/tyu-protocol", "core/tyu-core", "core/tyu-ffi", "tools/tyu-test-peer"]
+default-members = ["core/tyu-types", "core/tyu-protocol", "core/tyu-core", "tools/tyu-test-peer"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[workspace.dependencies]
+tyu-types = { path = "core/tyu-types" }
+tyu-protocol = { path = "core/tyu-protocol" }
+tyu-core = { path = "core/tyu-core" }
+serde = { version = "1", features = ["derive"] }
+postcard = { version = "1", features = ["alloc"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util", "fs", "signal"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-ring"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+rcgen = { version = "0.14", default-features = false, features = ["ring", "crypto"] }
+sha2 = "0.10"
+blake3 = "1"
+bytes = { version = "1", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+mdns-sd = "0.18"
+cap-std = "4"
+tempfile = "3"
+directories = "6"
+hex = "0.4"
+

@@ -1,0 +1,18 @@
+[package]
+name = "tyu-ffi"
+version.workspace = true
+edition.workspace = true
+[lib]
+crate-type = ["rlib", "cdylib"]
+[dependencies]
+tyu-core.workspace = true
+tokio.workspace = true
+postcard.workspace = true
+bytes.workspace = true
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+serde_json = "1"
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -8,6 +8,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Rule
 import org.junit.Test
+import org.junit.Before
 import java.io.File
 
 /**
@@ -16,6 +17,11 @@ import java.io.File
  */
 class TyuJourneyTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+
+    @Before fun useExplicitVisualFixture() {
+        compose.activity.intent.putExtra("tyu.fixture", true)
+        compose.activityRule.scenario.recreate()
+    }
 
     private fun waitFor(text: String) {
         compose.waitUntil(10_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }

@@ -1,76 +1,67 @@
-# Tyu Desktop
+# TYU Desktop
 
-Native Windows desktop client built with Rust and Slint.
-
-This module builds independently from `../Android`. It shares TYU colors and the
-Material icon family, with its own desktop composition and connection service.
-
-## Structure
-
-- `src/navigation`: routes and navigation history.
-- `src/state`: application-facing state containers.
-- `src/model`: platform-neutral desktop domain types.
-- `src/mock`: deterministic fixtures for development and tests only.
-- `src/pairing.rs`: local HTTP pairing service and approval state.
-- `src/pairing.html`: phone browser connection page served by the desktop.
-- `src/ui/theme`: visual tokens.
-- `src/ui/components`: reusable Slint primitives.
-- `src/ui/layouts`: desktop composition shells.
-- `src/ui/screens`: route-level Slint surfaces.
+Native Rust Edition 2024 / Slint 1.17.1 client, now part of the root Cargo workspace.
+The existing composition, theme and navigation are preserved. Android remains a
+separate Gradle application and connects through the same Rust Core via JNI.
 
 ## Run
 
-```text
-cargo run
+```powershell
+cargo run -p tyu-desktop
+cargo run -p tyu-test-peer -- pair 'tyu://pair/...'
 ```
+
+Normal startup uses TYU Core: LAN discovery, QUIC/TLS 1.3, pinned QR invitations,
+explicit approval, persistent identity and trusted reconnect. This QR requires a
+native TYU-compatible client; a phone browser is not the product connection path.
+Install the Android APK and select this computer in the discovery list, or open
+**Conectar mediante QR** and scan its QR. Both first-pairing paths require approval
+in Desktop. Update both clients together. See [Android connection](../docs/ANDROID_CONNECTION.md).
+
+The backend runtime owns networking. Slint callbacks send commands through
+`src/backend/core_bridge.rs`; bounded Core events update the existing AppState.
+No screen/camera/microphone capture, OS input injection or virtual drivers exist.
+Protocol negotiation must not be interpreted as an operating platform device.
+
+Real files can be sent by the peer into the Desktop private Received directory.
+Desktop `--send-file <path>` sends a file when the next peer connects. Native file
+picker, full remote storage browser and multi-device workspace remain UI work.
+Use `--data-dir <directory>` for isolated development identities.
+
+`TYU_ADVERTISE_IP` selects the QR's interface. mDNS advertises eligible interfaces.
+For local CLI testing, explicitly set `TYU_PAIRING_URI_FILE` to export the current
+short-lived invitation; protect and remove this bearer invitation after use.
+
+## Development fallback and screenshots
+
+```powershell
+cargo run -p tyu-desktop -- --legacy-pairing
+cargo run -p tyu-desktop -- --smoke
+cargo run -p tyu-desktop -- --view connected --screenshot capture.png
+```
+
+`src/pairing.rs` and `src/pairing.html` are retained as an unencrypted HTTP
+fallback. Only explicit legacy/fixture modes start that server. HTTP tokens do
+not authorize Core services. The original native smoke verifies legacy callbacks;
+new Rust tests independently verify the real Desktop bridge with QUIC peers.
+
+`--view connected|mirror|bypass|pairing` preserves screenshot fixtures.
+Normal startup has no sample connected devices or synthetic transfer clock.
 
 ## Verify
 
-```text
-cargo fmt --check
-cargo test
-```
-
-## Connecting a phone
-
-The application starts with no connected devices. Scan the QR using the phone's
-camera, open the link, enter the phone name and choose **Solicitar conexión**.
-The desktop displays the supplied name and **Aceptar / Rechazar**.
-Accepting establishes the local pairing session and opens the device workspace.
-Rejecting keeps the current desktop page and issues a new QR. There are no
-automatically connected sample devices.
-
-Both devices must be on the same private LAN. The server binds only to the
-selected private IPv4 interface and a free port. Windows Firewall may require
-allowing the executable on private networks; TYU does not change firewall rules.
-If the PC has multiple network adapters, its default route determines the address.
-
-QR tickets expire after ten minutes, requests after two minutes. The phone
-checks its session every two seconds; closing the page or losing contact
-disconnects it after thirty seconds. Keep the phone page open while connected.
-Tickets rotate after accept, reject and disconnect.
-
-This is a local HTTP pairing channel, not encrypted screen transport. Only the
-name, request and connection status are exchanged. Screen extension, mirroring,
-camera/audio capture and file transport are not implemented. The three mode
-buttons currently select their desktop views and animate connection direction.
-The existing Android app has no integration with this service yet; scanning
-uses the phone browser and does not modify Android code.
-
-## UI validation
-
-`cargo test` covers approval/rejection, token replay, expiry, lost heartbeat,
-HTTP endpoints and desktop state. `cargo run -- --smoke` exercises native UI
-callbacks against the local pairing service.
-
-Capture with the software renderer (PowerShell):
+Run at the repository root:
 
 ```powershell
-$env:SLINT_BACKEND = 'winit-software'
-$env:SLINT_SCALE_FACTOR = '1'
-.\target\debug\tyu-desktop.exe --screenshot .impeccable/review/empty-v3.png --width 1260 --height 820
-.\target\debug\tyu-desktop.exe --view connected --screenshot .impeccable/review/connected-v3.png --width 1260 --height 820
+cargo fmt --all --check
+cargo check --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo run -p tyu-desktop -- --smoke
 ```
 
-`--view connected|mirror|bypass|pairing` is an explicit screenshot fixture;
-normal startup never uses those fixture devices.
+Workspace builds now write to the root `target/`; the retained historical
+`desktop/Cargo.lock` is not the active workspace lockfile.
+
+See [architecture](../docs/ARCHITECTURE.md), [protocol](../docs/PROTOCOL.md),
+[security](../docs/SECURITY.md) and [backend status](../docs/BACKEND_STATUS.md).

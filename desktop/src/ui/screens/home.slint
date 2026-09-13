@@ -46,7 +46,7 @@ export component HomeScreen inherits Rectangle {
                 VerticalLayout {
                     alignment: center; spacing: 18px;
                     Text { text: "Escanea el QR"; color: Colors.text-primary; font-size: 22px; font-weight: 600; }
-                    Text { text: "Usa la cámara de tu teléfono y abre el enlace. Ambos equipos deben estar en la misma red Wi-Fi."; color: Colors.text-secondary; font-size: 14px; wrap: word-wrap; }
+                    Text { text: Data.pairing-instructions; color: Colors.text-secondary; font-size: 14px; wrap: word-wrap; }
                     Text { text: "Después, acepta la solicitud que aparecerá en este equipo."; color: Colors.text-secondary; font-size: 14px; wrap: word-wrap; }
                     Text { text: Data.pairing-error; visible: Data.pairing-error != ""; color: Colors.danger; font-size: 13px; wrap: word-wrap; }
                 }

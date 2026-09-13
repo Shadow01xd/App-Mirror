@@ -1,0 +1,7 @@
+/target/
+/desktop/target/
+/Android/.gradle/
+/Android/local.properties
+/Android/**/build/
+/.tyu-peer/
+

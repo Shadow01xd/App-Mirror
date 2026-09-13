@@ -12,7 +12,7 @@ Interfaz nativa Kotlin / Jetpack Compose que representa el enlace entre teléfon
 
 ## Capabilities and Constraints
 
-El frontend actual utiliza exclusivamente estado local de demostración. No se añaden permisos, conexiones, backend, almacenamiento real ni captura de hardware.
+La conexión normal utiliza TYU Core compartido mediante Rust/JNI: búsqueda LAN y conexión al tocar el equipo, o QR escaneado; ambas formas solicitan aprobación en Desktop. No se exige QR al conectar por búsqueda y no hay campo para pegar enlaces. Se mantiene QUIC/TLS, identidad y confianza persistentes, reconexión y desconexión. Se conserva Compose. Cámara se solicita únicamente para escanear el QR; se añaden permisos de red y multicast. Los adaptadores de pantalla, cámara como servicio, micrófono, SAF y portapapeles del sistema aún no existen y no muestran estados activos simulados en el recorrido normal.
 
 Flujo existente: bienvenida, permisos visuales, búsqueda o QR, conexión/error/reintento, dispositivo conectado, modos, servicios, actividad, detalles y configuración. Monitor representa PC → teléfono; Espejo, teléfono → PC; Bypass, teléfono ↔ PC sin compartir pantalla. Los controles y estados se conservan al volver y al recrear la actividad.
 
@@ -26,7 +26,7 @@ Inferido del recorrido existente: personas que usan teléfono y PC juntos y elig
 
 ## Evidence on Hand
 
-README.md, mock/, model/, feature/, navegación local y pruebas TyuJourneyTest.kt. Las cifras, dispositivos y archivos son ejemplos existentes, no capacidades operativas verificadas.
+README.md, app/backend/, ../core/, model/, feature/, NativeConnectionTest.kt y TyuJourneyTest.kt. Los ejemplos de mock/ permanecen solo en previews y en el recorrido visual explícito de depuración (`tyu.fixture=true`). Consultar ../docs/BACKEND_STATUS.md para la validación real.
 
 ## Accessibility & Inclusion
 
