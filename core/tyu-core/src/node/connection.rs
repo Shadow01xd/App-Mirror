@@ -1,4 +1,35 @@
-use super::{TyuEvent, actor::Internal};
+use super::{TyuEvent, actor::Internal, requests::MEDIA_STREAM_TAG};
+
+/// Reads length-prefixed media packets from one reliable unidirectional stream until it ends.
+async fn media_stream(context: Context, peer: DeviceId, mut recv: quinn::RecvStream) -> Result<()> {
+    let mut tag = [0u8; 4];
+    if recv.read_exact(&mut tag).await.is_err() || tag != MEDIA_STREAM_TAG {
+        return Ok(());
+    }
+    loop {
+        let mut len = [0u8; 4];
+        if recv.read_exact(&mut len).await.is_err() {
+            return Ok(());
+        }
+        let len = u32::from_be_bytes(len) as usize;
+        if len == 0 || len > 65535 {
+            return Err(TyuErrorCode::Malformed.into());
+        }
+        let mut bytes = vec![0u8; len];
+        recv.read_exact(&mut bytes)
+            .await
+            .map_err(|_| TyuErrorCode::Malformed)?;
+        if let Ok(packet) = crate::media::MediaPacket::decode(bytes.into())
+            && context
+                .internal
+                .send(Internal::Media { peer, packet })
+                .await
+                .is_err()
+        {
+            return Err(TyuErrorCode::Cancelled.into());
+        }
+    }
+}
 use crate::{
     Frame, Message, Result, TyuErrorCode, files,
     identity::{
@@ -342,6 +373,12 @@ pub(super) async fn run(
             datagram=connection.read_datagram()=>{
                 let Ok(data)=datagram else {break;};
                 if let Ok(packet)=crate::media::MediaPacket::decode(data) && context.internal.send(Internal::Media {peer,packet}).await.is_err() {break;}
+            },
+            stream=connection.accept_uni()=>{
+                let Ok(recv)=stream else {break;};
+                if children.len()>=16 {drop(recv);continue;}
+                let ctx=context.clone();let token=cancel.clone();
+                children.spawn(async move {tokio::select! {_=token.cancelled()=>Ok(()),result=media_stream(ctx,peer,recv)=>result}});
             },
             _=metrics.tick()=>{
                 let stats=connection.stats();

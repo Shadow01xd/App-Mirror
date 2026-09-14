@@ -27,6 +27,8 @@ pub struct AppState {
     pub transfer_paused: bool,
     pub history: Vec<String>,
     pub notice: String,
+    /// How the selected phone is reached: "Wi-Fi" or "USB" (tethered cable).
+    pub link: String,
     pub elapsed_ticks: u64,
     pub scan_ticks: u32,
     notice_ticks: u32,
@@ -38,6 +40,7 @@ impl AppState {
             notifications: true,
             noise_reduction: true,
             service: -1,
+            link: "Wi-Fi".into(),
             ..Self::default()
         }
     }
@@ -135,7 +138,8 @@ impl AppState {
 
     pub fn option(&mut self, key: &str, value: i32) {
         match key {
-            "page" if (0..=4).contains(&value) => {
+            // 5 is the full-size mirror view; it keeps Home as its navigation route.
+            "page" if (0..=5).contains(&value) => {
                 self.page = value;
                 self.navigation.navigate(match value {
                     1 => Route::Transfer,

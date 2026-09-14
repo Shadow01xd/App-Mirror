@@ -1,5 +1,26 @@
 use std::net::{IpAddr, Ipv4Addr, UdpSocket};
 
+/// "USB" when the peer is reached through a local interface other than the routed Wi-Fi one
+/// (a phone sharing its connection over the cable shows up as a separate RNDIS network), else
+/// "Wi-Fi". Heuristic: same /24 as that interface, different /24 from the routed address.
+pub fn link_label(peer: IpAddr) -> &'static str {
+    let IpAddr::V4(peer) = peer else {
+        return "Wi-Fi";
+    };
+    let same_subnet = |a: Ipv4Addr, b: Ipv4Addr| a.octets()[..3] == b.octets()[..3];
+    if let IpAddr::V4(routed) = pairing_ip()
+        && same_subnet(routed, peer)
+    {
+        return "Wi-Fi";
+    }
+    let direct = if_addrs::get_if_addrs()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|i| !i.is_loopback())
+        .any(|i| matches!(i.ip(), IpAddr::V4(local) if same_subnet(local, peer)));
+    if direct { "USB" } else { "Wi-Fi" }
+}
+
 /// Ask the OS routing table for its preferred IPv4 source address. UDP connect
 /// only sets a destination locally: no payload or Internet request is sent.
 pub fn pairing_ip() -> IpAddr {

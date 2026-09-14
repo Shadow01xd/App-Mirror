@@ -1,0 +1,83 @@
+import { Colors } from "../theme/colors.slint";
+import { Data } from "../data.slint";
+import { TyuButton } from "../components/tyu-button.slint";
+
+// Live phone picture (contain-fit) that turns mouse presses into normalized touches on the
+// picture itself, so the phone gets the same point the user clicked.
+component MirrorSurface inherits Rectangle {
+    in property <image> frame;
+    callback input(string, float, float);
+    callback key(string);
+    private property <float> sw: root.frame.width;
+    private property <float> sh: root.frame.height;
+    private property <float> scale: (root.sw > 0 && root.sh > 0) ? min(root.width / (root.sw * 1px), root.height / (root.sh * 1px)) : 0;
+    private property <length> cw: root.sw * root.scale * 1px;
+    private property <length> ch: root.sh * root.scale * 1px;
+    private property <length> ox: (root.width - root.cw) / 2;
+    private property <length> oy: (root.height - root.ch) / 2;
+    function emit(kind: string, mx: length, my: length) {
+        if (root.scale > 0) {
+            root.input(kind, clamp((mx - root.ox) / root.cw, 0, 1), clamp((my - root.oy) / root.ch, 0, 1));
+        }
+    }
+    background: #000000;
+    Image { width: 100%; height: 100%; source: root.frame; image-fit: contain; }
+    // Clicking the picture takes keyboard focus so typing goes to the phone.
+    keys := FocusScope {
+        width: 0; height: 0;
+        key-pressed(event) => { root.key(event.text); accept }
+    }
+    TouchArea {
+        pointer-event(event) => {
+            if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) { keys.focus(); root.emit("down", self.mouse-x, self.mouse-y); }
+            if (event.button == PointerEventButton.left && event.kind == PointerEventKind.up) { root.emit("up", self.mouse-x, self.mouse-y); }
+        }
+        moved => { if (self.pressed) { root.emit("move", self.mouse-x, self.mouse-y); } }
+    }
+}
+
+// Detached window with only the phone screen, resizable and usable next to other apps.
+// It is a separate component tree, so Rust feeds it its own frame instead of the Data global.
+export component MirrorWindow inherits Window {
+    in-out property <image> frame;
+    in-out property <string> device-name;
+    callback input(string, float, float);
+    callback key(string);
+    title: "TYU — " + root.device-name;
+    preferred-width: 420px; preferred-height: 880px;
+    min-width: 200px; min-height: 300px;
+    background: #000000;
+    MirrorSurface { width: 100%; height: 100%; frame: root.frame; input(k, x, y) => { root.input(k, x, y); } key(t) => { root.key(t); } }
+}
+
+// Full-size live view of the phone screen while a Mirror session is active.
+export component MirrorViewScreen inherits Rectangle {
+    background: transparent;
+    min-width: 600px;
+    VerticalLayout {
+        spacing: 16px; alignment: start;
+        HorizontalLayout {
+            height: 48px; spacing: 20px;
+            VerticalLayout {
+                spacing: 4px;
+                Text { text: "Pantalla de " + Data.device-name; color: Colors.text-primary; font-size: 24px; font-weight: 600; overflow: elide; }
+                Text { text: Data.notice == "" ? "Espejo en vivo · clic para tocar, teclado para escribir, Esc = Atrás" : Data.notice; color: Colors.text-secondary; font-size: 12px; overflow: elide; }
+            }
+            if !Data.popout-open: TyuButton { label: "Abrir en ventana"; secondary: true; width: 170px; clicked => { Data.action("popout"); } }
+            if Data.popout-open: TyuButton { label: "Volver aquí"; secondary: true; width: 170px; clicked => { Data.action("popin"); } }
+            TyuButton { label: "Detener"; secondary: true; width: 130px; clicked => { Data.action("session"); } }
+        }
+        if !Data.popout-open: Rectangle {
+            height: 620px; background: Colors.stage; border-radius: 12px; clip: true;
+            MirrorSurface { width: parent.width - 16px; height: parent.height - 16px; x: 8px; y: 8px; frame: Data.mirror-frame; input(k, x, y) => { Data.input(k, x, y); } key(t) => { Data.key(t); } }
+        }
+        if Data.popout-open: Rectangle {
+            height: 220px; background: Colors.stage; border-radius: 12px;
+            VerticalLayout {
+                alignment: center; spacing: 10px; padding: 24px;
+                Text { text: "La pantalla del teléfono está en una ventana aparte."; color: Colors.text-primary; font-size: 18px; font-weight: 600; horizontal-alignment: center; wrap: word-wrap; }
+                Text { text: "Cierra esa ventana o pulsa \"Volver aquí\" para verla de nuevo en la app."; color: Colors.text-secondary; font-size: 13px; horizontal-alignment: center; wrap: word-wrap; }
+            }
+        }
+    }
+}

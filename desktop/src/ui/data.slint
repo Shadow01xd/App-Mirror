@@ -9,10 +9,14 @@ export global Data {
     in-out property <int> selected-device: 0;
     in-out property <string> device-name;
     in-out property <bool> connected: false;
+    in-out property <string> link-label: "Conectado por Wi-Fi";
     in-out property <string> pending-name;
     in-out property <string> pairing-url;
     in-out property <string> pairing-error;
     in-out property <image> pairing-qr;
+    in-out property <image> mirror-frame;
+    // The phone picture is shown in its own window; the in-app view steps aside.
+    in-out property <bool> popout-open: false;
     in-out property <bool> active: false;
     in-out property <bool> scanning: false;
     in-out property <int> dialog: 0;
@@ -33,6 +37,10 @@ export global Data {
     in-out property <bool> transfer-paused: false;
     in-out property <string> pairing-instructions: "Usa la cámara de tu teléfono y abre el enlace. Ambos equipos deben estar en la misma red Wi-Fi.";
     callback action(string);
+    // Touch injected into the mirrored phone: kind (down/move/up), normalized x and y.
+    callback input(string, float, float);
+    // Keyboard text/keys typed into the mirrored phone.
+    callback key(string);
     callback option(string, int);
     callback toggle(string, bool);
     pure callback matches(string, string) -> bool;

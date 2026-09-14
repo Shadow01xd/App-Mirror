@@ -5,6 +5,8 @@ use tyu_core::*;
 pub struct BackendRuntime {
     pub events: mpsc::Receiver<TyuEvent>,
     commands: mpsc::Sender<TyuCommand>,
+    media: mpsc::Sender<(DeviceId, media::MediaPacket)>,
+    decoder: super::decode::DecodeHandle,
     cancel: CancellationToken,
     worker: Option<thread::JoinHandle<()>>,
 }
@@ -12,6 +14,9 @@ impl BackendRuntime {
     pub fn start(data_root: Option<std::path::PathBuf>) -> std::io::Result<Self> {
         let (commands, mut rx) = mpsc::channel(128);
         let (events, event_rx) = mpsc::channel(256);
+        let (media, mut media_rx) = mpsc::channel::<(DeviceId, media::MediaPacket)>(2048);
+        let decoder = super::decode::start();
+        let decode_sink = decoder.clone();
         let cancel = CancellationToken::new();
         let token = cancel.clone();
         let worker=thread::Builder::new().name("tyu-backend".into()).spawn(move || {
@@ -22,7 +27,7 @@ impl BackendRuntime {
                     let store=Arc::new(super::windows_store::WindowsPersistentStore::open(&root)?);
                     let mut config=NodeConfig::new("TYU Desktop",DevicePlatform::Windows,store);
                     config.allow_nearby_pairing=true;
-                    use Capability::*;config.capabilities=vec![MonitorSource,MirrorReceiver,CameraReceiver,MicrophoneReceiver,StorageConsumer,FileSend,FileReceive,ClipboardSource,ClipboardReceiver,InputReceiver];
+                    use Capability::*;config.capabilities=vec![MonitorSource,MirrorReceiver,CameraReceiver,MicrophoneReceiver,StorageConsumer,FileSend,FileReceive,ClipboardSource,ClipboardReceiver,InputReceiver,TouchSource];
                     config.receive_directory=Some(root.join("Received"));TyuNode::start(config).await
                 }.await;
                 let mut node=match result {Ok(n)=>n,Err(error)=>{tracing::error!(code=?error.code(),"Core startup failed");let _sent=events.send(TyuEvent::Error {request:None,code:error.code()}).await;return;}};
@@ -36,7 +41,13 @@ impl BackendRuntime {
                 loop {tokio::select! {
                     _=token.cancelled()=>break,
                     command=rx.recv()=>{let Some(command)=command else {break;};if node.command(command).await.is_err() {break;}},
+                    packet=media_rx.recv()=>{
+                        let Some((peer,packet))=packet else {break;};
+                        if let Err(error)=node.send_media(peer,packet).await {tracing::debug!(code=?error.code(),"monitor frame dropped");}
+                    },
                     event=node.events.recv()=>{let Some(event)=event else {break;};
+                        // Video never reaches the UI event queue: it would flood it at frame rate.
+                        if let TyuEvent::MediaFrame {data,..}=event {decode_sink.push(data);continue;}
                         if matches!(event,TyuEvent::PairingExpired|TyuEvent::PairingRejected {..}|TyuEvent::PairingCompleted {..}) && let Err(error)=node.command(TyuCommand::BeginPairing {endpoint:pairing_endpoint}).await {tracing::warn!(code=?error.code(),"QR renewal failed");}
                         tokio::select! {_=token.cancelled()=>break,result=events.send(event)=>{if result.is_err() {break;}}}
                         // Wake native event processing. State updates remain on its existing timer.
@@ -49,14 +60,30 @@ impl BackendRuntime {
         Ok(Self {
             events: event_rx,
             commands,
+            media,
+            decoder,
             cancel,
             worker: Some(worker),
         })
+    }
+    /// Newest decoded picture from the peer, if one arrived since the last call.
+    pub fn take_frame(&self) -> Option<super::decode::RgbFrame> {
+        self.decoder.take_frame()
+    }
+    pub fn reset_decoder(&self) {
+        self.decoder.reset();
+    }
+    pub fn decoder_needs_keyframe(&self) -> bool {
+        self.decoder.take_keyframe_request()
     }
     pub fn send(&self, command: TyuCommand) -> tyu_core::Result<()> {
         self.commands
             .try_send(command)
             .map_err(|_| TyuErrorCode::Limit.into())
+    }
+    /// A cloneable sink a capture thread can hold independently of this runtime's lifetime.
+    pub fn media_sender(&self) -> mpsc::Sender<(DeviceId, media::MediaPacket)> {
+        self.media.clone()
     }
 }
 impl Drop for BackendRuntime {

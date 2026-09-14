@@ -14,9 +14,11 @@ import com.tyu.app.ui.theme.*
 import com.tyu.app.model.UiMode
 
 @Composable
-fun MirrorActiveScreen(computer: String, onStop: () -> Unit, onBack: () -> Unit) {
-    TyuActiveService("Espejo activo", "Transmitiendo a $computer", computer,
+fun MirrorActiveScreen(computer: String, onStop: () -> Unit, onBack: () -> Unit,
+    status: String = "Transmitiendo a $computer", controlEnabled: Boolean = false, onEnableControl: () -> Unit = {}) {
+    TyuActiveService("Espejo activo", status, computer,
         UiMode.Mirror.icon(), onStop, onBack) {
         TyuFootnote("teléfono → PC")
+        TyuControlStatus(controlEnabled, onEnableControl)
     }
 }

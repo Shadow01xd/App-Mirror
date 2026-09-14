@@ -579,3 +579,163 @@ async fn discovery_can_start_stop_restart_and_shutdown() {
         .unwrap()
         .unwrap();
 }
+
+// Same sequence the Android JNI "mirror" / "media-start" / sendMediaFrame bridge drives:
+// negotiate a Display(Mirror) session, register the video stream, then push packetized,
+// already-encoded frame bytes (a real MediaCodec H.264 access unit on-device; synthetic here).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn phone_mirrors_a_captured_frame_to_desktop() {
+    let mut phone = TyuNode::start(config("Phone", Arc::new(MemoryStore::default()), true))
+        .await
+        .unwrap();
+    let mut desktop = TyuNode::start(config("Desktop", Arc::new(MemoryStore::default()), false))
+        .await
+        .unwrap();
+    pair(&mut phone, &mut desktop).await;
+    phone
+        .command(TyuCommand::StartMode {
+            peer: desktop.device.id,
+            mode: TyuMode::Mirror,
+        })
+        .await
+        .unwrap();
+    let TyuEvent::ModeStarted {
+        session: mirror, ..
+    } = event(&mut phone, |e| {
+        matches!(
+            e,
+            TyuEvent::ModeStarted {
+                mode: TyuMode::Mirror,
+                ..
+            }
+        )
+    })
+    .await
+    else {
+        unreachable!()
+    };
+    event(&mut desktop, |e| {
+        matches!(
+            e,
+            TyuEvent::ModeStarted {
+                mode: TyuMode::Mirror,
+                ..
+            }
+        )
+    })
+    .await;
+    let stream = StreamId::new();
+    let mut f = Frame::new(Message::MediaStart {
+        stream,
+        format: MediaMetadata::Video(VideoFormat {
+            width: 1080,
+            height: 2400,
+            fps: 30,
+            bitrate: 4_000_000,
+            codec: VideoCodec::H264,
+            orientation: Orientation::Portrait,
+        }),
+    });
+    f.session = Some(mirror);
+    phone
+        .command(TyuCommand::Request {
+            peer: desktop.device.id,
+            frame: f,
+        })
+        .await
+        .unwrap();
+    event(&mut phone, |e| matches!(e, TyuEvent::MediaStarted { .. })).await;
+    let encoded = bytes::Bytes::from(vec![0x65; 20_000]); // stand-in for one MediaCodec access unit
+    for packet in media::packetize(mirror, stream, 1, 0, true, encoded.clone(), 1200).unwrap() {
+        phone.send_media(desktop.device.id, packet).await.unwrap();
+    }
+    let TyuEvent::MediaFrame { data: received, .. } =
+        event(&mut desktop, |e| matches!(e, TyuEvent::MediaFrame { .. })).await
+    else {
+        unreachable!()
+    };
+    assert_eq!(received, encoded);
+    phone.shutdown().await.unwrap();
+    desktop.shutdown().await.unwrap();
+}
+
+// Same sequence Desktop's core_bridge drives for Monitor (PC -> phone): once ModeStarted fires,
+// Desktop unconditionally publishes its own screen by sending MediaStart itself, regardless of
+// which side called StartMode first.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn desktop_publishes_its_screen_to_the_phone_in_monitor_mode() {
+    let mut phone = TyuNode::start(config("Phone", Arc::new(MemoryStore::default()), true))
+        .await
+        .unwrap();
+    let mut desktop = TyuNode::start(config("Desktop", Arc::new(MemoryStore::default()), false))
+        .await
+        .unwrap();
+    pair(&mut phone, &mut desktop).await;
+    // The phone requests Monitor; Desktop is still the one that ends up publishing, since it is
+    // the only side with MonitorSource.
+    phone
+        .command(TyuCommand::StartMode {
+            peer: desktop.device.id,
+            mode: TyuMode::Monitor,
+        })
+        .await
+        .unwrap();
+    let TyuEvent::ModeStarted {
+        session: monitor, ..
+    } = event(&mut desktop, |e| {
+        matches!(
+            e,
+            TyuEvent::ModeStarted {
+                mode: TyuMode::Monitor,
+                ..
+            }
+        )
+    })
+    .await
+    else {
+        unreachable!()
+    };
+    event(&mut phone, |e| {
+        matches!(
+            e,
+            TyuEvent::ModeStarted {
+                mode: TyuMode::Monitor,
+                ..
+            }
+        )
+    })
+    .await;
+    let stream = StreamId::new();
+    let mut f = Frame::new(Message::MediaStart {
+        stream,
+        format: MediaMetadata::Video(VideoFormat {
+            width: 2560,
+            height: 1440,
+            fps: 30,
+            bitrate: 4_000_000,
+            codec: VideoCodec::H264,
+            orientation: Orientation::Landscape,
+        }),
+    });
+    f.session = Some(monitor);
+    desktop
+        .command(TyuCommand::Request {
+            peer: phone.device.id,
+            frame: f,
+        })
+        .await
+        .unwrap();
+    event(&mut desktop, |e| matches!(e, TyuEvent::MediaStarted { .. })).await;
+    let encoded = bytes::Bytes::from(vec![0x42; 15_000]); // stand-in for one GDI+openh264 frame
+    for packet in media::packetize(monitor, stream, 1, 0, true, encoded.clone(), 1200).unwrap() {
+        desktop.send_media(phone.device.id, packet).await.unwrap();
+    }
+    let TyuEvent::MediaFrame { data: received, .. } =
+        event(&mut phone, |e| matches!(e, TyuEvent::MediaFrame { .. })).await
+    else {
+        unreachable!()
+    };
+    assert_eq!(received, encoded);
+    phone.shutdown().await.unwrap();
+    desktop.shutdown().await.unwrap();
+}

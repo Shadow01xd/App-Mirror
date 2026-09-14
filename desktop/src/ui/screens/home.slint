@@ -14,7 +14,7 @@ export component HomeScreen inherits Rectangle {
             VerticalLayout {
                 spacing: 7px;
                 Text { text: Data.device-name; color: Colors.text-primary; font-size: 28px; font-weight: 600; overflow: elide; }
-                Text { text: "Conectado por Wi-Fi"; color: Colors.success; font-size: 13px; }
+                Text { text: Data.link-label; color: Colors.success; font-size: 13px; }
             }
             TyuButton { label: "Desconectar"; secondary: true; width: 130px; clicked => { Data.action("disconnect"); } }
         }
@@ -25,6 +25,11 @@ export component HomeScreen inherits Rectangle {
             Text { text: Data.mode == 0 ? "PC → Teléfono · Usa tu teléfono como segunda pantalla." : Data.mode == 1 ? "Teléfono → PC · Visualiza tu teléfono en el escritorio." : "PC ↔ Teléfono · Conecta los recursos de ambos equipos."; color: Colors.text-secondary; font-size: 13px; wrap: word-wrap; }
         }
         TyuModeSelector { selected-index: Data.mode; selected(i) => { Data.option("mode", i); } }
+        TyuButton {
+            label: Data.active ? "Detener" : "Iniciar";
+            width: 160px;
+            clicked => { Data.action("session"); }
+        }
     }
     if !Data.connected: VerticalLayout {
         spacing: 24px; alignment: start;

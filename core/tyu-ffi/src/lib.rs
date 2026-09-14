@@ -165,7 +165,9 @@ fn pump(h: &mut Handle) -> std::result::Result<(), isize> {
                 stream,
                 data,
             }) => {
-                if h.media.len() >= 4 {
+                // Deep enough that the consumer, not this queue, decides which frames to skip:
+                // dropping an arbitrary P-frame here breaks decoding until the next keyframe.
+                if h.media.len() >= 120 {
                     h.media.pop_front();
                 }
                 h.media.push_back(MediaFrame {

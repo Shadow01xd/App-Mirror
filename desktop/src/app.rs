@@ -27,7 +27,7 @@ pub fn sync(window: &DesktopShell, state: &AppState) {
                 DeviceItem {
                     name: d.name.into(),
                     detail: if connected {
-                        "Conectado · Wi-Fi".into()
+                        format!("Conectado · {}", state.link).into()
                     } else {
                         "Disponible para vincular".into()
                     },
@@ -72,6 +72,7 @@ pub fn sync(window: &DesktopShell, state: &AppState) {
     data.set_device_name(state.device_name().into());
     data.set_pending_name(state.pending_name.clone().into());
     data.set_connected(state.connected());
+    data.set_link_label(format!("Conectado por {}", state.link).into());
     data.set_active(state.mode.active);
     data.set_scanning(state.scan_ticks > 0);
     data.set_dialog(state.dialog);
@@ -220,6 +221,31 @@ pub fn run() -> Result<(), slint::PlatformError> {
     }
     sync(&window, &state.borrow());
     {
+        let state = state.clone();
+        let backend = backend.clone();
+        window.global::<Data>().on_input(move |kind, x, y| {
+            if let Some(backend) = &backend {
+                backend
+                    .borrow_mut()
+                    .input(kind.as_str(), x, y, &mut state.borrow_mut());
+            }
+        });
+    }
+    {
+        let state = state.clone();
+        let backend = backend.clone();
+        window.global::<Data>().on_key(move |text| {
+            if let Some(backend) = &backend {
+                backend.borrow_mut().input(
+                    &format!("key:{text}"),
+                    0.0,
+                    0.0,
+                    &mut state.borrow_mut(),
+                );
+            }
+        });
+    }
+    {
         let weak = window.as_weak();
         let state = state.clone();
         let pairing = pairing.clone();
@@ -354,7 +380,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
     let fixture = args.iter().any(|a| a == "--view");
     timer.start(
         slint::TimerMode::Repeated,
-        Duration::from_millis(100),
+        Duration::from_millis(16),
         move || {
             if legacy {
                 state.borrow_mut().tick();

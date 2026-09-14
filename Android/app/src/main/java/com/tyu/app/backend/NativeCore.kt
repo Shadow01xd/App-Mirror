@@ -8,5 +8,10 @@ object NativeCore {
     external fun snapshot(handle: Long): String
     external fun command(handle: Long, kind: String, value: String): String
     external fun poll(handle: Long): String
+    external fun acquireMediaFrame(handle: Long): ByteArray?
+    external fun sendMediaFrame(
+        handle: Long, peer: String, session: String, stream: String,
+        frameId: Long, timestampMicros: Long, keyframe: Boolean, data: ByteArray,
+    ): Boolean
     external fun shutdown(handle: Long): Int
 }

@@ -127,7 +127,8 @@ fn config() -> Arc<quinn::TransportConfig> {
         20000,
     ))));
     config.max_concurrent_bidi_streams(16u32.into());
-    config.max_concurrent_uni_streams(0u32.into());
+    // One unidirectional stream per outgoing media stream (video/audio), bounded like sessions.
+    config.max_concurrent_uni_streams(64u32.into());
     config.stream_receive_window(256_000u32.into());
     config.receive_window(4_000_000u32.into());
     config.send_window(4_000_000);

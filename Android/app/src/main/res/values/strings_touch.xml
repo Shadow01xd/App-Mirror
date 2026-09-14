@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tyu_touch_service_description">Permite controlar este teléfono desde la PC mientras el modo Espejo está activo: los toques hechos sobre la pantalla espejada en la PC se reproducen aquí. Solo funciona con una sesión TYU autenticada.</string>
+</resources>

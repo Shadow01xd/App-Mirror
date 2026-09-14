@@ -178,6 +178,8 @@ pub enum TyuEvent {
     },
     Connected {
         device: DeviceInfo,
+        /// Peer endpoint the winning QUIC connection uses (Wi-Fi, USB tether, ...).
+        address: SocketAddr,
     },
     Disconnected {
         peer: DeviceId,

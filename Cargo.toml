@@ -31,3 +31,14 @@ tempfile = "3"
 directories = "6"
 hex = "0.4"
 
+# The H.264 codec and its SIMD helpers are unusable at opt-level 0; keep them optimized in dev.
+[profile.dev.package.openh264]
+opt-level = 3
+[profile.dev.package.openh264-sys2]
+opt-level = 3
+[profile.dev.package.wide]
+opt-level = 3
+# Per-frame pixel work (NV12 -> RGB, cursor overlay, downscale) must not run unoptimized.
+[profile.dev.package.tyu-desktop]
+opt-level = 2
+

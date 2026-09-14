@@ -11,7 +11,8 @@ import { HomeScreen } from "../screens/home.slint";
 import { SessionsScreen } from "../screens/sessions.slint";
 import { SettingsScreen } from "../screens/settings.slint";
 import { DeviceDetailsScreen } from "../screens/device-details.slint";
-export { Data, Motion }
+import { MirrorViewScreen, MirrorWindow } from "../screens/mirror-view.slint";
+export { Data, Motion, MirrorWindow }
 export component DesktopShell inherits Window {
     title: "TYU — Tu teléfono, en tu escritorio";
     preferred-width: 1260px; preferred-height: 820px;
@@ -46,6 +47,7 @@ export component DesktopShell inherits Window {
                     if Data.page == 2: SessionsScreen {}
                     if Data.page == 3: SettingsScreen {}
                     if Data.page == 4: DeviceDetailsScreen {}
+                    if Data.page == 5: MirrorViewScreen {}
                 }
             }
         }
@@ -54,7 +56,7 @@ export component DesktopShell inherits Window {
                 Rectangle { width: 6px;
                     TyuStatusDot { active: Data.connected; size: 6px; y: (parent.height - self.height) / 2; }
                 }
-                Text { text: Data.connected ? "Conectado por Wi-Fi" : "Esperando un teléfono"; font-size: 11px; color: Colors.text-secondary; vertical-alignment: center; }
+                Text { text: Data.connected ? Data.link-label : "Esperando un teléfono"; font-size: 11px; color: Colors.text-secondary; vertical-alignment: center; }
                 Text { text: Data.active ? "Sesión  " + Data.elapsed : "TYU Desktop"; font-size: 10px; color: Colors.muted; horizontal-alignment: right; vertical-alignment: center; }
             }
         }

@@ -17,7 +17,7 @@ import com.tyu.app.model.UiDevice
 @Composable
 fun NearbyScreen(state: NearbyUiState, onSearch: () -> Unit, onPair: (UiDevice) -> Unit,
     onQr: () -> Unit, onBack: () -> Unit, onSettings: () -> Unit,
-    devices: List<UiDevice> = MockDevices.nearby) {
+    devices: List<UiDevice> = MockDevices.nearby, onUsb: (() -> Unit)? = null) {
     TyuPage(onBack = onBack, onSettings = onSettings, spread = state != NearbyUiState.Found) {
         if (state == NearbyUiState.Found) {
             TyuHeading("Tu próximo enlace", "Elige el equipo que quieres conectar.")
@@ -48,6 +48,10 @@ fun NearbyScreen(state: NearbyUiState, onSearch: () -> Unit, onPair: (UiDevice) 
             verticalArrangement = Arrangement.spacedBy(TyuDimens.Medium)) {
             TyuFootnote("¿No encuentras tu dispositivo?")
             TyuSecondaryButton("Conectar mediante QR", onQr, Modifier.fillMaxWidth(), TyuIcons.Qr)
+            if (onUsb != null) {
+                TyuSecondaryButton("Conectar por cable USB", onUsb, Modifier.fillMaxWidth(), TyuIcons.Desktop)
+                TyuFootnote("Activa \"Compartir conexión por USB\": el enlace va por el cable, sin pérdidas ni latencia de Wi-Fi. Si usas datos móviles, desactívalos para no gastarlos.")
+            }
         }
     }
 }

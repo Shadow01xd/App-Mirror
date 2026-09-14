@@ -14,7 +14,8 @@ import com.tyu.app.ui.theme.*
 import com.tyu.app.model.UiMode
 
 @Composable
-fun MirrorScreen(computer: String, state: MirrorUiState, onStart: () -> Unit, onBack: () -> Unit) {
+fun MirrorScreen(computer: String, state: MirrorUiState, onStart: () -> Unit, onBack: () -> Unit,
+    controlEnabled: Boolean = false, onEnableControl: () -> Unit = {}) {
     TyuPage(onBack = onBack, spread = true, bottom = {
         TyuButton(if (state == MirrorUiState.Connecting) "Preparando…" else "Transmitir pantalla",
             onStart, Modifier.fillMaxWidth().padding(vertical = TyuDimens.Medium), UiMode.Mirror.icon(), enabled = state == MirrorUiState.Idle)
@@ -28,6 +29,17 @@ fun MirrorScreen(computer: String, state: MirrorUiState, onStart: () -> Unit, on
                 TyuProgressBar(null)
                 TyuFootnote("Preparando la pantalla…")
             }
+            TyuControlStatus(controlEnabled, onEnableControl)
         }
+    }
+}
+
+/** Whether the PC can control this phone, with the one-time Accessibility step when it cannot. */
+@Composable
+fun TyuControlStatus(enabled: Boolean, onEnable: () -> Unit) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(TyuDimens.Small)) {
+        TyuFootnote(if (enabled) "Control desde la PC: activado"
+            else "Control desde la PC: desactivado · activa \"TYU control táctil\" en Accesibilidad")
+        if (!enabled) TyuSecondaryButton("Activar control desde la PC", onEnable, Modifier.fillMaxWidth())
     }
 }

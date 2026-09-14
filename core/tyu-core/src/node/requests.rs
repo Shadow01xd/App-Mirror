@@ -10,7 +10,10 @@ use crate::{
     transport,
 };
 use std::time::{Duration, Instant};
-use tokio::sync::{oneshot, watch};
+use tokio::sync::{mpsc, oneshot, watch};
+
+/// First bytes of every unidirectional media stream, so receivers can tell them apart.
+pub(super) const MEDIA_STREAM_TAG: &[u8] = b"TYUM";
 
 impl Actor {
     pub async fn command(&mut self, command: TyuCommand) -> Result<()> {
@@ -557,6 +560,7 @@ impl Actor {
                 }
                 self.sessions.media.remove(stream);
                 self.sessions.media_senders.remove(stream);
+                self.media_writers.remove(stream);
                 if let Some(r) = self.reassembler.get_mut(&peer) {
                     r.remove_stream(frame.session.ok_or(TyuErrorCode::InvalidState)?, *stream);
                 }
@@ -681,7 +685,7 @@ impl Actor {
         });
         Ok(())
     }
-    pub fn send_media(&self, peer: DeviceId, packet: MediaPacket) -> Result<()> {
+    pub fn send_media(&mut self, peer: DeviceId, packet: MediaPacket) -> Result<()> {
         self.check_session(peer, Some(packet.session_id))?;
         if self.sessions.media_senders.get(&packet.stream_id) != Some(&self.context.device.id) {
             return Err(TyuErrorCode::Unauthorized.into());
@@ -695,9 +699,45 @@ impl Actor {
             return Err(TyuErrorCode::InvalidState.into());
         }
         let link = self.links.get(&peer).ok_or(TyuErrorCode::NotAvailable)?;
-        link.connection
-            .send_datagram(packet.encode()?)
-            .map_err(transport::neterr)
+        let bytes = packet.encode()?;
+        let stream = packet.stream_id;
+        let writer = match self.media_writers.get(&stream) {
+            Some(writer) if !writer.is_closed() => writer.clone(),
+            _ => {
+                // Packets of one media stream travel in order on one unidirectional QUIC
+                // stream: lost packets are retransmitted instead of dropping the frame.
+                let (tx, mut rx) = mpsc::channel::<bytes::Bytes>(4096);
+                let connection = link.connection.clone();
+                let cancel = link.cancel.clone();
+                self.tasks.spawn(async move {
+                    let Ok(mut send) = connection.open_uni().await else {
+                        return;
+                    };
+                    if send.write_all(MEDIA_STREAM_TAG).await.is_err() {
+                        return;
+                    }
+                    loop {
+                        tokio::select! {
+                            _ = cancel.cancelled() => break,
+                            next = rx.recv() => {
+                                let Some(bytes) = next else { break; };
+                                if send.write_all(&(bytes.len() as u32).to_be_bytes()).await.is_err()
+                                    || send.write_all(&bytes).await.is_err()
+                                {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    let _ = send.finish();
+                });
+                self.media_writers.insert(stream, tx.clone());
+                tx
+            }
+        };
+        writer
+            .try_send(bytes)
+            .map_err(|_| TyuErrorCode::Limit.into())
     }
     pub async fn receive_media(&mut self, peer: DeviceId, packet: MediaPacket) {
         if self.sessions.media_senders.get(&packet.stream_id) != Some(&peer) {
@@ -717,7 +757,9 @@ impl Actor {
         let result = self
             .reassembler
             .entry(peer)
-            .or_insert_with(|| Reassembler::new(Duration::from_millis(150)))
+            // Wi-Fi bursts spread a large keyframe over hundreds of ms; a tight window would
+            // discard it and stall the stream until the next one.
+            .or_insert_with(|| Reassembler::new(Duration::from_millis(500)))
             .push(packet, Instant::now());
         match result {
             Ok(Some(data)) => {

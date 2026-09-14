@@ -93,6 +93,9 @@ pub(super) struct Actor {
     pub transfers: HashMap<TransferId, Transfer>,
     pub sessions: SessionManager,
     pub discovery: Option<Discovery>,
+    /// One reliable QUIC stream per outgoing media stream; video is never sent as datagrams
+    /// any more because a single lost datagram discards the whole frame.
+    pub media_writers: HashMap<StreamId, mpsc::Sender<bytes::Bytes>>,
     internal: mpsc::Receiver<Internal>,
     generation: usize,
     pub reassembler: HashMap<DeviceId, Reassembler>,
@@ -138,6 +141,7 @@ impl Actor {
             transfers: HashMap::new(),
             sessions: SessionManager::default(),
             discovery: None,
+            media_writers: HashMap::new(),
             internal,
             generation: 0,
             reassembler: HashMap::new(),
@@ -270,6 +274,7 @@ impl Actor {
                 );
                 self.emit(TyuEvent::Connected {
                     device: auth.device.clone(),
+                    address: auth.connection.remote_address(),
                 })
                 .await;
                 self.emit(TyuEvent::CapabilitiesNegotiated {
@@ -342,6 +347,8 @@ impl Actor {
             link.connection.close(0u32.into(), b"disconnect");
         }
         self.sessions.disconnect(peer);
+        self.media_writers
+            .retain(|stream, _| self.sessions.media.contains_key(stream));
         self.pending.retain(|_, p| p.peer != peer);
         self.reassembler.remove(&peer);
         self.replay.remove(&peer);

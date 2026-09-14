@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
         android:allowBackup="false"
         android:fullBackupContent="false"
@@ -26,5 +29,18 @@
                 <data android:scheme="tyu" android:host="pair" />
             </intent-filter>
         </activity>
+        <service android:name=".backend.MirrorCaptureService"
+            android:foregroundServiceType="mediaProjection"
+            android:exported="false" />
+        <service android:name=".backend.TouchInjectionService"
+            android:label="TYU control táctil"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data android:name="android.accessibilityservice"
+                android:resource="@xml/touch_injection_service" />
+        </service>
     </application>
 </manifest>

@@ -235,7 +235,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             ev=node.events.recv()=>{let Some(ev)=ev else {break;};match &ev {
                 TyuEvent::PairingStarted {ticket}=>println!("\r\nPair URI (expires {}): {}\r",ticket.expires,ticket.uri()?),
                 TyuEvent::PairingRequest {request,device,fingerprint}=>{println!("\r\nPair request {request}: {} [{fingerprint:?}]\r",device.name);if approve {node.command(TyuCommand::AcceptPairing {request:*request}).await?;}},
-                TyuEvent::Connected {device}=>{connected=Some(device.id);println!("\r\nConnected: {} ({})\r",device.name,device.id);if let Some(line)=deferred.take() {node.command(command(&line,connected)?).await?;}},
+                TyuEvent::Connected {device,..}=>{connected=Some(device.id);println!("\r\nConnected: {} ({})\r",device.name,device.id);if let Some(line)=deferred.take() {node.command(command(&line,connected)?).await?;}},
                 TyuEvent::Disconnected {peer}=>{if connected==Some(*peer) {connected=None;}println!("\r\nDisconnected {peer}\r");},
                 TyuEvent::MetricsUpdated {..}|TyuEvent::TransferProgress {..}=>{},
                 TyuEvent::ClipboardReceived {peer,text}=>println!("\r\nClipboard from {peer}: {} UTF-8 bytes\r",text.len()),
