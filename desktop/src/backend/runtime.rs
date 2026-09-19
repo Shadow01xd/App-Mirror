@@ -7,12 +7,18 @@ pub struct BackendRuntime {
     commands: mpsc::Sender<TyuCommand>,
     media: mpsc::Sender<(DeviceId, media::MediaPacket)>,
     decoder: super::decode::DecodeHandle,
+    pub storage: super::bypass_storage::StorageBridge,
+    pub bypass_status: std::sync::mpsc::Receiver<super::bypass_media::Status>,
     cancel: CancellationToken,
     worker: Option<thread::JoinHandle<()>>,
 }
 impl BackendRuntime {
     pub fn start(data_root: Option<std::path::PathBuf>) -> std::io::Result<Self> {
         let (commands, mut rx) = mpsc::channel(128);
+        let storage = super::bypass_storage::StorageBridge::start(commands.clone())?;
+        let storage_broker = storage.broker.clone();
+        let (bypass_tx, bypass_status) = std::sync::mpsc::channel();
+        let mut bypass_media = super::bypass_media::Receivers::new(bypass_tx, commands.clone());
         let (events, event_rx) = mpsc::channel(256);
         let (media, mut media_rx) = mpsc::channel::<(DeviceId, media::MediaPacket)>(2048);
         let decoder = super::decode::start();
@@ -23,12 +29,13 @@ impl BackendRuntime {
             let runtime=match tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build() {Ok(r)=>r,Err(error)=>{tracing::error!(%error,"backend runtime unavailable");return;}};
             runtime.block_on(async move {
                 let result=async {
+                    let received = match &data_root { Some(root) => root.join("Received"), None => directories::UserDirs::new().and_then(|d|d.document_dir().map(|p|p.join("TYU"))).ok_or_else(||std::io::Error::other("No se encontró Documentos"))? };
                     let root=match data_root {Some(root)=>root,None=>super::windows_store::data_directory()?};
                     let store=Arc::new(super::windows_store::WindowsPersistentStore::open(&root)?);
                     let mut config=NodeConfig::new("TYU Desktop",DevicePlatform::Windows,store);
                     config.allow_nearby_pairing=true;
                     use Capability::*;config.capabilities=vec![MonitorSource,MirrorReceiver,CameraReceiver,MicrophoneReceiver,StorageConsumer,FileSend,FileReceive,ClipboardSource,ClipboardReceiver,InputReceiver,TouchSource];
-                    config.receive_directory=Some(root.join("Received"));TyuNode::start(config).await
+                    config.receive_directory=Some(received);TyuNode::start(config).await
                 }.await;
                 let mut node=match result {Ok(n)=>n,Err(error)=>{tracing::error!(code=?error.code(),"Core startup failed");let _sent=events.send(TyuEvent::Error {request:None,code:error.code()}).await;return;}};
                 let initial=node.command(TyuCommand::StartDiscovery).await;
@@ -46,6 +53,8 @@ impl BackendRuntime {
                         if let Err(error)=node.send_media(peer,packet).await {tracing::debug!(code=?error.code(),"monitor frame dropped");}
                     },
                     event=node.events.recv()=>{let Some(event)=event else {break;};
+                        if storage_broker.deliver(&event) {continue;}
+                        if bypass_media.event(&event) {continue;}
                         // Video never reaches the UI event queue: it would flood it at frame rate.
                         if let TyuEvent::MediaFrame {data,..}=event {decode_sink.push(data);continue;}
                         if matches!(event,TyuEvent::PairingExpired|TyuEvent::PairingRejected {..}|TyuEvent::PairingCompleted {..}) && let Err(error)=node.command(TyuCommand::BeginPairing {endpoint:pairing_endpoint}).await {tracing::warn!(code=?error.code(),"QR renewal failed");}
@@ -62,6 +71,8 @@ impl BackendRuntime {
             commands,
             media,
             decoder,
+            storage,
+            bypass_status,
             cancel,
             worker: Some(worker),
         })

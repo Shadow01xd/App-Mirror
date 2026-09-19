@@ -3,6 +3,7 @@ import { Data } from "../data.slint";
 import { TyuButton } from "../components/tyu-button.slint";
 import { TyuDeviceStage } from "../components/tyu-device-stage.slint";
 import { TyuModeSelector } from "../components/tyu-mode-selector.slint";
+import { BypassScreen } from "bypass.slint";
 export component HomeScreen inherits Rectangle {
     in property <bool> compact: false;
     background: transparent;
@@ -25,7 +26,8 @@ export component HomeScreen inherits Rectangle {
             Text { text: Data.mode == 0 ? "PC → Teléfono · Usa tu teléfono como segunda pantalla." : Data.mode == 1 ? "Teléfono → PC · Visualiza tu teléfono en el escritorio." : "PC ↔ Teléfono · Conecta los recursos de ambos equipos."; color: Colors.text-secondary; font-size: 13px; wrap: word-wrap; }
         }
         TyuModeSelector { selected-index: Data.mode; selected(i) => { Data.option("mode", i); } }
-        TyuButton {
+        if Data.mode == 2: BypassScreen {}
+        if Data.mode != 2: TyuButton {
             label: Data.active ? "Detener" : "Iniciar";
             width: 160px;
             clicked => { Data.action("session"); }

@@ -15,9 +15,20 @@ pub trait StorageProvider: Send + Sync {
     fn mkdir(&self, path: &str) -> Result<()>;
     fn rename(&self, from: &str, to: &str) -> Result<()>;
     fn delete(&self, path: &str) -> Result<()>;
+    fn list_page(&self, path: &str, offset: u32) -> Result<Vec<StorageMetadata>> {
+        Ok(self
+            .list(path)?
+            .into_iter()
+            .skip(offset as usize)
+            .take(128)
+            .collect())
+    }
     fn execute(&self, op: StorageOp) -> Result<StorageReply> {
         Ok(match op {
             StorageOp::List { path } => StorageReply::Entries(self.list(&path)?),
+            StorageOp::ListPage { path, offset } => {
+                StorageReply::Entries(self.list_page(&path, offset)?)
+            }
             StorageOp::Stat { path } => StorageReply::Entries(vec![self.stat(&path)?]),
             StorageOp::Read {
                 path,
@@ -47,6 +58,49 @@ pub struct LocalFilesystemProvider {
     root: Dir,
     max_file_size: u64,
 }
+/// Android grants and revokes the exported root without restarting an existing connection.
+/// Disabled by default; every operation checks the current grant.
+#[derive(Default)]
+pub struct SharedStorageProvider(std::sync::RwLock<Option<LocalFilesystemProvider>>);
+impl SharedStorageProvider {
+    pub fn set_root(&self, root: Option<&Path>, max_file_size: u64) -> Result<()> {
+        let provider = root
+            .map(|root| LocalFilesystemProvider::new(root, max_file_size))
+            .transpose()?;
+        *self.0.write().map_err(|_| TyuErrorCode::InvalidState)? = provider;
+        Ok(())
+    }
+    fn with<T>(&self, f: impl FnOnce(&LocalFilesystemProvider) -> Result<T>) -> Result<T> {
+        let guard = self.0.read().map_err(|_| TyuErrorCode::InvalidState)?;
+        f(guard.as_ref().ok_or(TyuErrorCode::PathDenied)?)
+    }
+}
+impl StorageProvider for SharedStorageProvider {
+    fn list_page(&self, p: &str, o: u32) -> Result<Vec<StorageMetadata>> {
+        self.with(|s| s.list_page(p, o))
+    }
+    fn list(&self, p: &str) -> Result<Vec<StorageMetadata>> {
+        self.with(|s| s.list(p))
+    }
+    fn stat(&self, p: &str) -> Result<StorageMetadata> {
+        self.with(|s| s.stat(p))
+    }
+    fn read_range(&self, p: &str, o: u64, n: u32) -> Result<Vec<u8>> {
+        self.with(|s| s.read_range(p, o, n))
+    }
+    fn write(&self, p: &str, o: u64, d: &[u8]) -> Result<()> {
+        self.with(|s| s.write(p, o, d))
+    }
+    fn mkdir(&self, p: &str) -> Result<()> {
+        self.with(|s| s.mkdir(p))
+    }
+    fn rename(&self, a: &str, b: &str) -> Result<()> {
+        self.with(|s| s.rename(a, b))
+    }
+    fn delete(&self, p: &str) -> Result<()> {
+        self.with(|s| s.delete(p))
+    }
+}
 pub fn relative(path: &str, allow_root: bool) -> Result<&str> {
     if (path.is_empty() || path == ".") && allow_root {
         return Ok(".");
@@ -68,6 +122,23 @@ impl LocalFilesystemProvider {
     }
 }
 impl StorageProvider for LocalFilesystemProvider {
+    fn list_page(&self, path: &str, offset: u32) -> Result<Vec<StorageMetadata>> {
+        let path = relative(path, true)?;
+        let mut result = Vec::new();
+        for entry in self.root.read_dir(path)?.skip(offset as usize).take(128) {
+            let name = entry?
+                .file_name()
+                .into_string()
+                .map_err(|_| TyuErrorCode::PathDenied)?;
+            let child = if path == "." {
+                name
+            } else {
+                format!("{path}/{name}")
+            };
+            result.push(self.stat(&child)?);
+        }
+        Ok(result)
+    }
     fn list(&self, path: &str) -> Result<Vec<StorageMetadata>> {
         let path = relative(path, true)?;
         let mut result = Vec::new();

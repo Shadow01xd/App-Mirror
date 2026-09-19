@@ -15,10 +15,10 @@ import androidx.compose.foundation.background
 import androidx.compose.ui.draw.clip
 
 @Composable
-fun MicrophoneActiveScreen(computer: String, onStop: () -> Unit, onBack: () -> Unit) {
+fun MicrophoneActiveScreen(computer: String, onStop: () -> Unit, onBack: () -> Unit, live: Boolean = false) {
     TyuActiveService("Micrófono activo", "Tu voz, en $computer.", computer,
         MicrophoneIcon, onStop, onBack) {
-        TyuAudioStage(active = true)
-        TyuFootnote("Nivel ilustrativo · sin captura de audio")
+        if (!live) TyuAudioStage(active = true)
+        TyuFootnote(if (live) "Audio 48 kHz por Wi-Fi · Selecciona TYU Microphone como micrófono en el PC" else "Nivel ilustrativo · sin captura de audio")
     }
 }

@@ -13,7 +13,7 @@ import com.tyu.app.ui.theme.*
 
 @Composable
 fun MicrophoneScreen(computer: String, onStart: () -> Unit, onBack: () -> Unit,
-    initial: MicrophoneUiState = MicrophoneUiState()) {
+    initial: MicrophoneUiState = MicrophoneUiState(), onNoise: (Boolean) -> Unit = {}) {
     var noise by rememberSaveable { mutableStateOf(initial.noiseReduction) }
     TyuPage(onBack = onBack, bottom = {
         TyuButton("Activar micrófono", onStart, Modifier.fillMaxWidth().padding(vertical = TyuDimens.Medium), MicrophoneIcon)
@@ -25,6 +25,6 @@ fun MicrophoneScreen(computer: String, onStart: () -> Unit, onBack: () -> Unit,
             Text(initial.source, style = MaterialTheme.typography.titleMedium)
             Text("Fuente de audio", color = TyuColors.Secondary, style = MaterialTheme.typography.bodyMedium)
         }
-        TyuCard { TyuToggle("Reducción de ruido", "Una voz más clara.", noise, { noise = it }) }
+        TyuCard { TyuToggle("Reducción de ruido", "Si el teléfono admite esta función.", noise, { noise = it; onNoise(it) }) }
     }
 }

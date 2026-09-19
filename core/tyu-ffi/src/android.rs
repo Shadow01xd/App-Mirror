@@ -37,6 +37,7 @@ pub extern "system" fn Java_com_tyu_app_backend_NativeCore_initialize(
         let Ok(mut h) = h.lock() else {
             return FAILURE;
         };
+        let shared_storage = h.shared_storage.clone();
         let Some(config) = h.config.as_mut() else {
             return STATE;
         };
@@ -50,7 +51,11 @@ pub extern "system" fn Java_com_tyu_app_backend_NativeCore_initialize(
             Capability::MirrorSource,
             Capability::MonitorReceiver,
             Capability::InputReceiver,
+            Capability::CameraSource,
+            Capability::MicrophoneSource,
+            Capability::StorageProvider,
         ];
+        config.storage = Some(shared_storage);
         config.receive_directory = Some(Path::new(&path).join("received"));
         0
     });
@@ -169,6 +174,79 @@ pub extern "system" fn Java_com_tyu_app_backend_NativeCore_command(
                     TyuCommand::Request { peer, frame: f }
                 }
             }
+            "storage-root" => {
+                let h = get(handle as u64).ok_or("Invalid handle")?;
+                let h = h.lock().map_err(|_| "Native state unavailable")?;
+                h.shared_storage
+                    .set_root(
+                        if value.is_empty() {
+                            None
+                        } else {
+                            Some(Path::new(&value))
+                        },
+                        8 * 1024 * 1024 * 1024,
+                    )
+                    .map_err(|e| e.to_string())?;
+                return Ok(json!({"ok":true}));
+            }
+            "bypass-start" | "bypass-stop" | "bypass-media" | "send-file" | "cancel-file" => {
+                let v: Value = serde_json::from_str(&value).map_err(|_| "Invalid value")?;
+                let field = |k: &str| v[k].as_str().ok_or("Invalid value");
+                let peer = DeviceId(field("peer")?.parse().map_err(|_| "Invalid device")?);
+                selected = Some(peer);
+                match kind.as_str() {
+                    "bypass-start" => TyuCommand::StartService {
+                        peer,
+                        service: match field("service")? {
+                            "Camera" => ServiceKind::Camera,
+                            "Microphone" => ServiceKind::Microphone,
+                            "Storage" => ServiceKind::Storage,
+                            _ => return Err("Invalid service".into()),
+                        },
+                    },
+                    "bypass-stop" => TyuCommand::StopService {
+                        peer,
+                        session: SessionId(
+                            field("session")?.parse().map_err(|_| "Invalid session")?,
+                        ),
+                    },
+                    "send-file" => TyuCommand::SendFile {
+                        peer,
+                        id: TransferId(field("id")?.parse().map_err(|_| "Invalid transfer")?),
+                        path: field("path")?.into(),
+                    },
+                    "cancel-file" => TyuCommand::CancelTransfer {
+                        id: TransferId(field("id")?.parse().map_err(|_| "Invalid transfer")?),
+                    },
+                    _ => {
+                        let session =
+                            SessionId(field("session")?.parse().map_err(|_| "Invalid session")?);
+                        let format = if field("service")? == "Microphone" {
+                            MediaMetadata::Audio(AudioFormat {
+                                sample_rate: 48000,
+                                channels: 1,
+                                bitrate: 768000,
+                                codec: AudioCodec::PCM,
+                            })
+                        } else {
+                            MediaMetadata::Video(VideoFormat {
+                                width: 1280,
+                                height: 720,
+                                fps: 30,
+                                bitrate: 4_000_000,
+                                codec: VideoCodec::H264,
+                                orientation: Orientation::Landscape,
+                            })
+                        };
+                        let mut frame = Frame::new(Message::MediaStart {
+                            stream: StreamId::new(),
+                            format,
+                        });
+                        frame.session = Some(session);
+                        TyuCommand::Request { peer, frame }
+                    }
+                }
+            }
             _ => return Err("Unsupported operation".into()),
         };
         let h = get(handle as u64).ok_or("Invalid native handle")?;
@@ -240,7 +318,31 @@ pub extern "system" fn Java_com_tyu_app_backend_NativeCore_poll(
                 TyuEvent::MediaStopped { stream, .. } => {
                     json!({"type":"media-stopped","stream":stream.to_string()})
                 }
-                TyuEvent::KeyframeRequested { .. } => json!({"type":"keyframe"}),
+                TyuEvent::KeyframeRequested { session, .. } => {
+                    json!({"type":"keyframe","session":session.to_string()})
+                }
+                TyuEvent::ServiceStarted {
+                    session, service, ..
+                } => {
+                    json!({"type":"service-started","session":session.to_string(),"service":format!("{service:?}")})
+                }
+                TyuEvent::ServiceStopped { session, .. } => {
+                    json!({"type":"service-stopped","session":session.to_string()})
+                }
+                TyuEvent::TransferOffered { metadata, .. } => {
+                    json!({"type":"file-offered","id":metadata.id.to_string(),"name":metadata.name,"total":metadata.size})
+                }
+                TyuEvent::TransferProgress {
+                    id, bytes, total, ..
+                } => {
+                    json!({"type":"file-progress","id":id.to_string(),"bytes":bytes,"total":total})
+                }
+                TyuEvent::TransferComplete { id, .. } => {
+                    json!({"type":"file-complete","id":id.to_string()})
+                }
+                TyuEvent::TransferFailed { id, code, .. } => {
+                    json!({"type":"file-failed","id":id.to_string(),"error":code.to_string()})
+                }
                 TyuEvent::InputReceived { event, .. } => {
                     json!({"type":"input","event":serde_json::to_value(&event).unwrap_or(Value::Null)})
                 }

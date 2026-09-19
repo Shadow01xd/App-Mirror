@@ -44,7 +44,7 @@ pub fn sync(window: &DesktopShell, state: &AppState) {
             .iter()
             .map(|f| FileItem {
                 name: f.file_name.clone().into(),
-                size: format!("{:.1} MB · ejemplo", f.total_bytes as f64 / 1_000_000.0).into(),
+                size: format!("{:.1} MB", f.total_bytes as f64 / 1_000_000.0).into(),
                 progress: f.progress(),
                 status: match &f.status {
                     TransferStatus::Queued => "En cola".into(),

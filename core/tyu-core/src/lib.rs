@@ -25,7 +25,13 @@ impl CoreError {
     pub fn code(&self) -> TyuErrorCode {
         match self {
             Self::Code(c) => *c,
-            Self::Io(_) | Self::Store => TyuErrorCode::Io,
+            Self::Io(e) => match e.kind() {
+                std::io::ErrorKind::NotFound => TyuErrorCode::NotFound,
+                std::io::ErrorKind::AlreadyExists => TyuErrorCode::AlreadyExists,
+                std::io::ErrorKind::PermissionDenied => TyuErrorCode::PathDenied,
+                _ => TyuErrorCode::Io,
+            },
+            Self::Store => TyuErrorCode::Io,
             Self::Transport(_) => TyuErrorCode::NotAvailable,
         }
     }

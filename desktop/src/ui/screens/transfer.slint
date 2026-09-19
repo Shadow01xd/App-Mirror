@@ -10,13 +10,13 @@ export component TransferScreen inherits Rectangle {
         Rectangle { height: 150px; border-width: 1px; border-color: Colors.border; border-radius: 12px; background: Colors.stage;
             VerticalLayout { alignment: center; padding: 20px; spacing: 12px;
                 Image { source: @image-url("../../../assets/icons/send.svg"); width: 30px; height: 30px; colorize: Colors.accent; }
-                Text { text: "Prueba un envío de archivos"; color: Colors.text-primary; font-size: 18px; font-weight: 600; horizontal-alignment: center; }
-                Text { text: "La demostración usa foto.jpg, video.mp4 y documento.pdf. No accede a tus archivos."; color: Colors.text-secondary; font-size: 12px; horizontal-alignment: center; wrap: word-wrap; }
+                Text { text: "Envía archivos por tu red local"; color: Colors.text-primary; font-size: 18px; font-weight: 600; horizontal-alignment: center; }
+                Text { text: "Los archivos que recibas del teléfono se guardan en Documentos/TYU."; color: Colors.text-secondary; font-size: 12px; horizontal-alignment: center; wrap: word-wrap; }
             }
         }
         HorizontalLayout { height: 42px; spacing: 12px;
-            TyuButton { label: "Añadir ejemplos"; has-icon: true; icon: @image-url("../../../assets/icons/add.svg"); secondary: true; enabled: !Data.transfer-running; clicked => { Data.action("add-files"); } }
-            TyuButton { label: Data.transfer-running ? (Data.transfer-paused ? "Reanudar" : "Pausar") : "Enviar archivos"; enabled: Data.connected && Data.files.length > 0; clicked => { Data.action("transfer"); } }
+            TyuButton { label: "Elegir archivos"; has-icon: true; icon: @image-url("../../../assets/icons/add.svg"); secondary: true; enabled: !Data.transfer-running; clicked => { Data.action("add-files"); } }
+            TyuButton { label: Data.transfer-paused ? "Reanudar" : "Pausar"; enabled: Data.connected && Data.transfer-running; clicked => { Data.action("transfer"); } }
             TyuButton { label: "Cancelar"; secondary: true; enabled: Data.transfer-running; clicked => { Data.action("cancel-transfer"); } }
         }
         if !Data.connected: Text { text: "Conecta un dispositivo para enviar archivos."; font-size: 13px; color: Colors.warning; }

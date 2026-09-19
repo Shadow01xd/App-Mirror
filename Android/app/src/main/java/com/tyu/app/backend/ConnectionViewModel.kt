@@ -59,6 +59,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
     val state = mutable.asStateFlow()
     private val mutex = Mutex()
     private var handle = 0L
+    val bypass = BypassController(application, viewModelScope, { state.value.connected?.id }, ::send)
     private val usbOffered = HashSet<String>()
     private var lastDiscovery = 0L
     /** Already inside the native mutex (event loop): issue a command without re-locking. */
@@ -115,6 +116,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
             } catch (error: Throwable) {
                 mutable.update { it.copy(error = error.message ?: "Backend nativo no disponible", ready = false) }
             } finally {
+                application.stopService(android.content.Intent(application, BypassCaptureService::class.java))
                 withContext(NonCancellable + Dispatchers.IO) {
                     mutex.withLock {
                         if (handle != 0L) { NativeCore.shutdown(handle); handle = 0L }
@@ -211,6 +213,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
     private fun applyEvent(event: JSONObject) {
+        if (bypass.event(event)) return
         when (event.getString("type")) {
             "found" -> {
                 val id = event.getString("id")

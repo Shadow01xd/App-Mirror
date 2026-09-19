@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use tyu_core::*;
 pub struct CoreBridge {
     runtime: BackendRuntime,
+    bypass_sessions: HashMap<ServiceKind, SessionId>,
     peers: HashMap<DeviceId, DeviceInfo>,
     pending: Option<RequestId>,
     mode_session: Option<SessionId>,
@@ -58,6 +59,7 @@ impl CoreBridge {
             .map(std::path::PathBuf::from);
         Ok(Self {
             runtime: BackendRuntime::start(data_root)?,
+            bypass_sessions: HashMap::new(),
             peers: HashMap::new(),
             pending: None,
             mode_session: None,
@@ -169,8 +171,34 @@ impl CoreBridge {
                 }
             }
             "popin" => self.hide_popout(),
+            "open-storage" => {
+                if let Err(error) = self.runtime.storage.open() {
+                    state.notice = error.to_string();
+                }
+            }
             "add-files" => {
-                state.notice = "Usa --send-file <ruta> para enviar un archivo al conectar".into()
+                if let Some(peer) = self.selected(state)
+                    && let Some(paths) = rfd::FileDialog::new()
+                        .set_title("Enviar archivos al teléfono")
+                        .pick_files()
+                {
+                    for path in paths {
+                        let id = TransferId::new();
+                        state.transfers.items.push(Transfer {
+                            id: id.to_string(),
+                            file_name: path
+                                .file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .into_owned(),
+                            direction: TransferDirection::Send,
+                            total_bytes: path.metadata().map(|m| m.len()).unwrap_or(0),
+                            transferred_bytes: 0,
+                            status: TransferStatus::Queued,
+                        });
+                        self.send(state, TyuCommand::SendFile { peer, id, path });
+                    }
+                }
             }
             "transfer" | "cancel-transfer" => {
                 for item in state.transfers.items.clone() {
@@ -203,18 +231,19 @@ impl CoreBridge {
     }
     pub fn toggle(&mut self, key: &str, value: bool, state: &mut AppState) {
         match key {
-            "camera" | "microphone" => {
-                state.notice = "Captura y dispositivos virtuales aún no disponibles".into()
-            }
-            "storage" => {
+            "camera" | "microphone" | "storage" => {
                 if let Some(peer) = self.selected(state) {
-                    self.send(
-                        state,
-                        TyuCommand::ListStorage {
-                            peer,
-                            path: "".into(),
-                        },
-                    );
+                    let service = match key {
+                        "camera" => ServiceKind::Camera,
+                        "microphone" => ServiceKind::Microphone,
+                        _ => ServiceKind::Storage,
+                    };
+                    if value {
+                        self.send(state, TyuCommand::StartService { peer, service });
+                        state.notice = "Confirma el permiso en el teléfono".into();
+                    } else if let Some(session) = self.bypass_sessions.get(&service).copied() {
+                        self.send(state, TyuCommand::StopService { peer, session });
+                    }
                 }
             }
             _ => state.toggle(key, value),
@@ -274,6 +303,27 @@ impl CoreBridge {
                 break;
             };
             self.event(event, state);
+        }
+        while let Ok(status) = self.runtime.bypass_status.try_recv() {
+            let current = self.bypass_sessions.get(&status.service);
+            // A failing receiver queues StopService too; preserve its error after that event is drained.
+            if current != Some(&status.session)
+                && (status.active
+                    || current.is_some()
+                    || !state
+                        .devices
+                        .nearby
+                        .iter()
+                        .any(|d| d.connection == ConnectionState::Connected))
+            {
+                continue;
+            }
+            match status.service {
+                ServiceKind::Camera => state.camera = status.active,
+                ServiceKind::Microphone => state.microphone = status.active,
+                _ => {}
+            }
+            state.notice = status.message;
         }
         while let Ok((kind, x, y)) = self.popout_input.1.try_recv() {
             if kind == "closed" {
@@ -349,6 +399,59 @@ impl CoreBridge {
         }
     }
     fn event(&mut self, event: TyuEvent, state: &mut AppState) {
+        match &event {
+            TyuEvent::ServiceStarted {
+                peer,
+                session,
+                service,
+            } => {
+                self.bypass_sessions.insert(*service, *session);
+                if *service == ServiceKind::Storage {
+                    let name = self
+                        .peers
+                        .get(peer)
+                        .map(|p| p.name.as_str())
+                        .unwrap_or("Android");
+                    match self.runtime.storage.mount(*peer, name) {
+                        Ok(()) => {
+                            state.storage = true;
+                            state.notice = format!(
+                                "TYU: {name} disponible en Este equipo. Confirma el permiso de archivos en el teléfono"
+                            );
+                        }
+                        Err(e) => state.notice = format!("No se pudo montar el teléfono: {e}"),
+                    }
+                } else {
+                    state.notice = "Esperando la captura del teléfono".into();
+                }
+                return;
+            }
+            TyuEvent::ServiceStopped { session, .. } => {
+                let service = self
+                    .bypass_sessions
+                    .iter()
+                    .find(|(_, s)| *s == session)
+                    .map(|(kind, _)| *kind);
+                if let Some(service) = service {
+                    self.bypass_sessions.remove(&service);
+                    match service {
+                        ServiceKind::Camera => state.camera = false,
+                        ServiceKind::Microphone => state.microphone = false,
+                        ServiceKind::Storage => {
+                            state.storage = false;
+                            self.runtime.storage.unmount();
+                        }
+                        _ => {}
+                    }
+                }
+                return;
+            }
+            TyuEvent::Disconnected { .. } => {
+                self.bypass_sessions.clear();
+                self.runtime.storage.unmount();
+            }
+            _ => {}
+        }
         match event {
             TyuEvent::PairingStarted { ticket } => match ticket.uri() {
                 Ok(uri) => {

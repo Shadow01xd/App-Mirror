@@ -46,6 +46,10 @@ pub enum TyuErrorCode {
     Io,
     #[error("invalid session state")]
     InvalidState,
+    #[error("file or directory not found")]
+    NotFound,
+    #[error("file or directory already exists")]
+    AlreadyExists,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -75,6 +79,10 @@ pub enum StorageOp {
     },
     Delete {
         path: String,
+    },
+    ListPage {
+        path: String,
+        offset: u32,
     },
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -224,6 +232,7 @@ impl Frame {
             FileOffer(m) => validate_filename(&m.name)?,
             Storage(op) => match op {
                 StorageOp::List { path }
+                | StorageOp::ListPage { path, .. }
                 | StorageOp::Stat { path }
                 | StorageOp::CreateDir { path }
                 | StorageOp::Delete { path } => bounded(path, 1024)?,

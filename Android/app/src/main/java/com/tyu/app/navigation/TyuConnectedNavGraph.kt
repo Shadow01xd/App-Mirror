@@ -17,6 +17,8 @@ import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import com.tyu.app.backend.ConnectionViewModel
 import com.tyu.app.backend.MirrorCaptureService
+import com.tyu.app.backend.BypassEffects
+import com.tyu.app.feature.transfer.TransferScreen
 import com.tyu.app.feature.onboarding.*
 import com.tyu.app.feature.permissions.*
 import com.tyu.app.feature.nearby.*
@@ -43,6 +45,8 @@ fun TyuNavGraph(fixture: Boolean = false, pairingUri: String? = null) {
 @Composable
 private fun TyuConnectedNavGraph(pairingUri: String?, backend: ConnectionViewModel = viewModel()) {
     val state by backend.state.collectAsState()
+    val bypass by backend.bypass.state.collectAsState()
+    BypassEffects(backend)
     val context = LocalContext.current
     var route by rememberSaveable { mutableStateOf(TyuRoute.Welcome) }
     var history by rememberSaveable { mutableStateOf(listOf<TyuRoute>()) }
@@ -198,19 +202,30 @@ private fun TyuConnectedNavGraph(pairingUri: String?, backend: ConnectionViewMod
                     state.mirrorStream == null -> "Preparando la transmisión…"
                     else -> "Transmitiendo a ${device.computerName}"
                 }, controlEnabled = state.touchControl, onEnableControl = ::openAccessibility)
-            TyuRoute.Bypass -> BypassScreen(device.computerName, false, false, false,
+            TyuRoute.Bypass -> BypassScreen(device.computerName, bypass.services["Camera"]?.stream != null, bypass.services["Microphone"]?.stream != null, bypass.storageEnabled,
                 onFeature = { feature -> when (feature) {
                     UiFeature.Camera -> navigate(TyuRoute.Camera)
                     UiFeature.Microphone -> navigate(TyuRoute.Microphone)
                     UiFeature.Storage -> navigate(TyuRoute.Storage)
-                    UiFeature.Transfer -> unavailable()
-                } }, onBack = ::back, status = "Conectado · Sin servicios activos")
-            TyuRoute.Camera, TyuRoute.CameraActive -> CameraScreen(device.computerName, onStart = ::unavailable, onBack = ::back)
-            TyuRoute.Microphone, TyuRoute.MicrophoneActive -> MicrophoneScreen(device.computerName, onStart = ::unavailable, onBack = ::back)
-            TyuRoute.Storage -> StorageScreen(device.computerName, StorageUiState(false), onEnabled = { unavailable() }, onBack = ::back)
-            TyuRoute.Device -> DeviceScreen(DeviceUiState(device, false, false, false),
-                onForget = backend::forget, onStorage = { unavailable() }, onCamera = { unavailable() },
-                onMicrophone = { unavailable() }, onBack = ::back, onDisconnect = backend::disconnect)
+                    UiFeature.Transfer -> navigate(TyuRoute.Transfer)
+                } }, onBack = ::back, status = "Conectado · ${bypass.services.size} servicios · Red local")
+            TyuRoute.Camera, TyuRoute.CameraActive -> if (bypass.services["Camera"]?.stream != null)
+                CameraActiveScreen(device.computerName, onStop = { backend.bypass.stop("Camera") }, onBack = ::back, live = true)
+                else CameraScreen(device.computerName, onStart = { backend.bypass.start("Camera") }, onBack = ::back,
+                    onLens = { backend.bypass.configure(lens = it) }, live = true)
+            TyuRoute.Microphone, TyuRoute.MicrophoneActive -> if (bypass.services["Microphone"]?.stream != null)
+                MicrophoneActiveScreen(device.computerName, onStop = { backend.bypass.stop("Microphone") }, onBack = ::back, live = true)
+                else MicrophoneScreen(device.computerName, onStart = { backend.bypass.start("Microphone") }, onBack = ::back,
+                    onNoise = { backend.bypass.configure(noise = it) })
+            TyuRoute.Storage -> StorageScreen(device.computerName, StorageUiState(bypass.storageEnabled),
+                onEnabled = { if (it) backend.bypass.start("Storage") else backend.bypass.stop("Storage") }, onBack = ::back)
+            TyuRoute.Transfer, TyuRoute.TransferProgress -> TransferScreen(device.computerName, onSend = {}, onQueue = {},
+                hasQueue = bypass.files.isNotEmpty(), onBack = ::back, files = bypass.files,
+                onSelected = backend.bypass::sendFiles, onCancel = backend.bypass::cancelFile)
+            TyuRoute.Device -> DeviceScreen(DeviceUiState(device, bypass.services["Camera"]?.stream != null, bypass.services["Microphone"]?.stream != null, bypass.storageEnabled),
+                onForget = backend::forget, onStorage = { if (it) backend.bypass.start("Storage") else backend.bypass.stop("Storage") },
+                onCamera = { if (it) backend.bypass.start("Camera") else backend.bypass.stop("Camera") },
+                onMicrophone = { if (it) backend.bypass.start("Microphone") else backend.bypass.stop("Microphone") }, onBack = ::back, onDisconnect = backend::disconnect)
             TyuRoute.Sessions -> SessionsScreen(SessionsUiState(emptyList()), onOpen = {}, onBack = ::back)
             TyuRoute.Settings -> SettingsScreen(state.connected != null, onPermissions = { navigate(TyuRoute.Permissions) },
                 onDevice = { if (state.connected != null) navigate(TyuRoute.Device)

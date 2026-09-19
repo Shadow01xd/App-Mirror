@@ -1,3 +1,7 @@
+mod bypass_camera;
+mod bypass_media;
+mod bypass_microphone;
+mod bypass_storage;
 pub mod core_bridge;
 mod decode;
 mod hw_encode;

@@ -12,9 +12,9 @@ import com.tyu.app.ui.icons.*
 import com.tyu.app.ui.theme.*
 
 @Composable
-fun CameraActiveScreen(computer: String, onStop: () -> Unit, onBack: () -> Unit) {
+fun CameraActiveScreen(computer: String, onStop: () -> Unit, onBack: () -> Unit, live: Boolean = false) {
     TyuActiveService("Cámara activa", "Cámara TYU disponible para $computer.", computer,
         CameraIcon, onStop, onBack) {
-        TyuFootnote("Vista simulada · sin captura de imagen")
+        TyuFootnote(if (live) "Transmitiendo por la red local · Selecciona TYU Camera en el PC" else "Vista simulada · sin captura de imagen")
     }
 }

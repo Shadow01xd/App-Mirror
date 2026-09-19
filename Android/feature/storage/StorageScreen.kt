@@ -13,20 +13,15 @@ import com.tyu.app.ui.theme.*
 
 @Composable
 fun StorageScreen(computer: String, state: StorageUiState, onEnabled: (Boolean) -> Unit, onBack: () -> Unit) {
-    var categories by rememberSaveable { mutableStateOf(listOf("Imágenes", "Documentos", "Descargas")) }
     TyuPage(onBack = onBack) {
         TyuConnectionBanner(computer)
-        TyuHeading("Acceso al almacenamiento", "Elige qué categorías estarán disponibles en tu PC.")
+        TyuHeading("Acceso al almacenamiento", "Abre las carpetas de este teléfono desde el Explorador de Windows.")
         TyuCard { TyuToggle("Compartir almacenamiento", "Tú decides qué compartir.",
             state.enabled, onEnabled, StorageIcon) }
-        TyuSectionTitle("CATEGORÍAS")
         TyuCard {
-            StorageUiState.categories.forEach { name ->
-                TyuToggle(name, "", name in categories, { selected ->
-                    categories = ArrayList(if (selected) categories + name else categories - name)
-                }, enabled = state.enabled)
-            }
+            Text("TYU: ${android.os.Build.MODEL}", style = MaterialTheme.typography.titleMedium)
+            Text("DCIM · Pictures · Download · Documents · Music · Android", color = TyuColors.Secondary)
         }
-        TyuFootnote("Las categorías son ilustrativas. No se leen carpetas ni archivos del teléfono.")
+        TyuFootnote("Solo tu PC vinculado accede por la red local mientras compartes. Android mantiene protegidos los datos privados de otras apps, incluidas sus carpetas Android/data y Android/obb.")
     }
 }

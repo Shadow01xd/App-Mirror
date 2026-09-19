@@ -138,6 +138,12 @@ pub enum TyuCommand {
         value: u64,
     },
     Shutdown,
+    /// Correlated storage RPC for native filesystem adapters.
+    StorageRequest {
+        peer: DeviceId,
+        request: RequestId,
+        operation: StorageOp,
+    },
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TyuEvent {

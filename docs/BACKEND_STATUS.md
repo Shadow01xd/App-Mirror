@@ -1,5 +1,9 @@
 # Backend status
 
+## Bypass update (2026-09-17)
+
+The current Bypass implementation and its platform limits are documented in [BYPASS.md](BYPASS.md). TYU now owns its Windows 11 virtual camera source and host, with no OBS dependency. Android Camera2/AudioRecord, Explorer storage through a local WebDAV bridge, and real direct-file pickers are connected to Core. Explorer read/write/rename/delete and Android-to-Windows virtual-camera video were exercised end to end. The Windows microphone adapter now targets the own TYU WaveRT driver, with no external audio cable dependency. Driver source, installer and WASAPI probe compile; PCM tests, static analysis and INF/catalog validation pass. The driver is unsigned and not installed: microphone endpoint creation and real capture remain unverified. See [MICROPHONE.md](MICROPHONE.md). The older phase notes below are historical and are not a current claim about Mirror or Monitor.
+
 This is a real first backend implementation, with incomplete product/platform integration. “Negotiated” never means hardware capture or a driver is operational.
 
 | Component | Implemented | Tested | Platform blocked | Next step |

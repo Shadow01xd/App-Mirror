@@ -122,6 +122,22 @@ impl Actor {
             TyuCommand::Storage { peer, operation } => {
                 self.rpc(peer, Frame::new(Message::Storage(operation)), true)?
             }
+            TyuCommand::StorageRequest {
+                peer,
+                request,
+                operation,
+            } => {
+                let mut frame = Frame::new(Message::Storage(operation));
+                frame.request = request;
+                if let Err(error) = self.rpc(peer, frame, true) {
+                    self.emit(TyuEvent::StorageResult {
+                        peer,
+                        request,
+                        result: Err(error.code()),
+                    })
+                    .await;
+                }
+            }
             TyuCommand::ListStorage { peer, path } => self.rpc(
                 peer,
                 Frame::new(Message::Storage(StorageOp::List { path })),

@@ -13,7 +13,7 @@ import com.tyu.app.ui.theme.*
 
 @Composable
 fun CameraScreen(computer: String, onStart: () -> Unit, onBack: () -> Unit,
-    initial: CameraUiState = CameraUiState()) {
+    initial: CameraUiState = CameraUiState(), onLens: (String) -> Unit = {}, live: Boolean = false) {
     var lens by rememberSaveable { mutableStateOf(initial.lens) }
     var quality by rememberSaveable { mutableStateOf(initial.quality) }
     TyuPage(onBack = onBack, bottom = {
@@ -22,7 +22,8 @@ fun CameraScreen(computer: String, onStart: () -> Unit, onBack: () -> Unit,
         TyuConnectionBanner(computer)
         TyuHeading("Cámara TYU", "Permite utilizar este teléfono como cámara de $computer.")
         TyuCameraPreview()
-        TyuOptions("CÁMARA", listOf("Principal", "Frontal", "Ultra gran angular"), lens, { lens = it })
-        TyuOptions("CALIDAD", listOf("Automática", "1080p", "720p"), quality, { quality = it })
+        TyuOptions("CÁMARA", if (live) listOf("Principal", "Frontal") else listOf("Principal", "Frontal", "Ultra gran angular"), lens, { lens = it; onLens(it) })
+        if (live) TyuFootnote("720p · 30 fps · Wi-Fi local. En el PC selecciona TYU Camera.")
+        else TyuOptions("CALIDAD", listOf("Automática", "1080p", "720p"), quality, { quality = it })
     }
 }

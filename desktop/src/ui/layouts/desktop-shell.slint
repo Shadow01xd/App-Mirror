@@ -10,6 +10,7 @@ import { TyuStatusDot } from "../components/tyu-status-dot.slint";
 import { HomeScreen } from "../screens/home.slint";
 import { SessionsScreen } from "../screens/sessions.slint";
 import { SettingsScreen } from "../screens/settings.slint";
+import { TransferScreen } from "../screens/transfer.slint";
 import { DeviceDetailsScreen } from "../screens/device-details.slint";
 import { MirrorViewScreen, MirrorWindow } from "../screens/mirror-view.slint";
 export { Data, Motion, MirrorWindow }
@@ -44,6 +45,7 @@ export component DesktopShell inherits Window {
                 opacity: 0.75 + root.enter * 0.25;
                 VerticalLayout { padding: 30px; alignment: start;
                     if Data.page == 0: HomeScreen { compact: root.height < 760px; }
+                    if Data.page == 1: TransferScreen {}
                     if Data.page == 2: SessionsScreen {}
                     if Data.page == 3: SettingsScreen {}
                     if Data.page == 4: DeviceDetailsScreen {}

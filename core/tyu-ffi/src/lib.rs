@@ -20,6 +20,8 @@ static REGISTRY: OnceLock<Registry> = OnceLock::new();
 static NEXT: AtomicU64 = AtomicU64::new(1);
 struct Handle {
     #[cfg(target_os = "android")]
+    shared_storage: Arc<tyu_core::storage::SharedStorageProvider>,
+    #[cfg(target_os = "android")]
     store: Arc<dyn tyu_core::identity::Store>,
     runtime: tokio::runtime::Runtime,
     config: Option<NodeConfig>,
@@ -86,6 +88,8 @@ pub unsafe extern "C" fn tyu_initialize(directory: *const u8, length: usize) -> 
         registry.insert(
             id,
             Arc::new(Mutex::new(Handle {
+                #[cfg(target_os = "android")]
+                shared_storage: Arc::default(),
                 #[cfg(target_os = "android")]
                 store,
                 runtime,
