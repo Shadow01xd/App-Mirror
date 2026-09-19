@@ -14,6 +14,7 @@ pub fn transfers() -> Vec<Transfer> {
         total_bytes: *bytes,
         transferred_bytes: 0,
         status: TransferStatus::Queued,
+        path: None,
     })
     .collect()
 }

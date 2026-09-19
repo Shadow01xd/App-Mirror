@@ -148,7 +148,18 @@ impl StorageBridge {
             let _ = namespace(&self.namespace, None);
         }
     }
+    /// Whether the phone's folder is published in this PC's Explorer.
+    pub fn is_mounted(&self) -> bool {
+        self.mounted.load(Ordering::Acquire)
+    }
     pub fn open(&self) -> io::Result<()> {
+        // Explorer happily opens on a path that leads nowhere, so spawning it is never proof
+        // that anything worked; refuse before that rather than leaving an empty window.
+        if !self.is_mounted() {
+            return Err(io::Error::other(
+                "Activa Almacenamiento en Bypass para poder abrir el teléfono",
+            ));
+        }
         std::process::Command::new("explorer.exe")
             .arg(&self.unc)
             .spawn()

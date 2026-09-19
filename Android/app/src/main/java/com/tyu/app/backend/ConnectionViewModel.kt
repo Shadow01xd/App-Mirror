@@ -20,25 +20,13 @@ import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 
 data class Peer(val id: String, val name: String, val endpoint: String = "", val trusted: Boolean = false,
-    /** "USB" when reached over the tethered cable network, else "Wi-Fi". */
+    /** "USB" when the PC reached this phone through the ADB cable bridge, else "Wi-Fi". */
     val link: String = "Wi-Fi") {
     fun ui(connected: Boolean = false) = UiDevice(id, name, name, ip = endpoint.substringBeforeLast(':', ""),
         status = if (connected) UiDeviceStatus.Connected else UiDeviceStatus.Available,
         connectionQuality = if (connected) "Conectado por $link" else "Disponible", nearby = true)
 }
 
-/** Whether [address] belongs to this phone's USB tethering network (rndis/usb/ncm interface). */
-private fun isUsbLink(address: String): Boolean {
-    val peer = address.split('.').takeIf { it.size == 4 } ?: return false
-    return runCatching {
-        java.net.NetworkInterface.getNetworkInterfaces().toList().any { iface ->
-            iface.name.startsWith("rndis") || iface.name.startsWith("usb") || iface.name.startsWith("ncm")
-        } && java.net.NetworkInterface.getNetworkInterfaces().toList()
-            .filter { it.name.startsWith("rndis") || it.name.startsWith("usb") || it.name.startsWith("ncm") }
-            .flatMap { it.inetAddresses.toList() }
-            .any { it.hostAddress?.split('.')?.take(3) == peer.take(3) }
-    }.getOrDefault(false)
-}
 data class ConnectionUiState(
     val ready: Boolean = false, val scanning: Boolean = false,
     val peers: List<Peer> = emptyList(), val connected: Peer? = null,
@@ -50,8 +38,6 @@ data class ConnectionUiState(
     val accessibilityMissing: Boolean = false,
     /** "TYU control táctil" is enabled in Accessibility, so PC touches can be replayed. */
     val touchControl: Boolean = false,
-    /** A known PC was found over the USB cable; the user is asked before connecting. */
-    val usbOffer: Peer? = null,
 )
 
 class ConnectionViewModel(application: Application) : AndroidViewModel(application) {
@@ -60,8 +46,8 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
     private val mutex = Mutex()
     private var handle = 0L
     val bypass = BypassController(application, viewModelScope, { state.value.connected?.id }, ::send)
-    private val usbOffered = HashSet<String>()
     private var lastDiscovery = 0L
+    private val bridge = UsbBridge(viewModelScope) { self }
     /** Already inside the native mutex (event loop): issue a command without re-locking. */
     private fun sendDirect(kind: String, value: String) {
         val result = JSONObject(NativeCore.command(handle, kind, value))
@@ -85,6 +71,8 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
                 }
                 val wifi = application.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
                 lock = wifi?.createMulticastLock("tyu-discovery")?.apply { setReferenceCounted(false); acquire() }
+                // Waits on loopback for a PC that forwarded this port over the USB cable.
+                bridge.start()
                 mutable.update { it.copy(ready = true) }
                 discover()
                 while (isActive) {
@@ -102,8 +90,9 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
                     }
                     val control = TouchInjectionService.instance != null
                     if (control != state.value.touchControl) mutable.update { it.copy(touchControl = control) }
-                    // The cable network appears later (USB tethering toggled on): a quiet rescan
-                    // while unconnected only refreshes the list, it never connects by itself.
+                    // A PC can join the network at any time: a quiet rescan while unconnected
+                    // only refreshes the list, it never connects by itself. (The cable does not
+                    // need this — the PC finds the phone through ADB and calls in.)
                     if (state.value.connected == null && state.value.connectingId == null &&
                         System.currentTimeMillis() - lastDiscovery > 8_000) {
                         lastDiscovery = System.currentTimeMillis()
@@ -118,6 +107,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
             } finally {
                 application.stopService(android.content.Intent(application, BypassCaptureService::class.java))
                 withContext(NonCancellable + Dispatchers.IO) {
+                    bridge.stop()
                     mutex.withLock {
                         if (handle != 0L) { NativeCore.shutdown(handle); handle = 0L }
                         if (lock?.isHeld == true) lock?.release()
@@ -127,8 +117,12 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    /** This phone's own TYU identity and UDP port, for the USB bridge. Null until Core starts. */
+    @Volatile private var self: Pair<String, Int>? = null
+
     private fun restorePeers() {
         val json = JSONObject(NativeCore.snapshot(handle))
+        self = json.optString("id").takeIf { it.isNotEmpty() }?.let { it to json.optInt("port") }
         val peers = json.optJSONArray("peers") ?: return
         val restored = (0 until peers.length()).map { i -> peers.getJSONObject(i).let {
             Peer(it.getString("id"), it.getString("name"), it.optString("endpoint"), true)
@@ -137,11 +131,6 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
     }
     fun clearError() { mutable.update { it.copy(error = null) } }
     fun accessibilityPrompted() { mutable.update { it.copy(accessibilityMissing = false) } }
-    fun answerUsb(accept: Boolean) {
-        val peer = state.value.usbOffer ?: return
-        mutable.update { it.copy(usbOffer = null) }
-        if (accept) connect(peer) else usbOffered.add(peer.id)
-    }
     fun discover() = send("discover", "")
     fun pair(uri: String) = send("pair", uri.trim())
     fun connect(peer: Peer) {
@@ -223,21 +212,14 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
                     val peer = existing?.copy(endpoint = endpoint) ?: Peer(id, "TYU ${id.take(8)}", endpoint)
                     old.copy(peers = old.peers.filterNot { it.id == id } + peer, scanning = false)
                 }
-                // Wi-Fi stays manual. A known PC reached over the USB cable is offered once;
-                // the user decides whether to connect.
-                val current = state.value
-                val peer = current.peers.find { it.id == id }
-                if (peer?.trusted == true && current.connected == null && current.connectingId == null &&
-                    current.usbOffer == null && id !in usbOffered && isUsbLink(endpoint.substringBeforeLast(':'))) {
-                    mutable.update { it.copy(usbOffer = peer.copy(link = "USB")) }
-                }
             }
             "lost" -> mutable.update { it.copy(peers = it.peers.filter { p -> p.id != event.getString("id") || p.trusted }) }
             "connecting" -> mutable.update { it.copy(connectingId = event.getString("peer"), error = null) }
             "connected" -> {
                 restorePeers()
                 val id = event.getString("id")
-                val link = if (isUsbLink(event.optString("address"))) "USB" else "Wi-Fi"
+                // Loopback means the PC reached this phone through the USB bridge.
+                val link = if (event.optString("address").startsWith("127.")) "USB" else "Wi-Fi"
                 val peer = (state.value.peers.find { it.id == id } ?: Peer(id, event.getString("name"), trusted = true)).copy(link = link)
                 mutable.update { it.copy(connected = peer, connectingId = null, error = null, scanning = false) }
             }

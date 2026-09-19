@@ -1,5 +1,15 @@
 export struct DeviceItem { name: string, detail: string, connected: bool }
-export struct FileItem { name: string, size: string, progress: float, status: string }
+export struct FileItem {
+    id: string,
+    name: string,
+    size: string,
+    progress: float,
+    status: string,
+    // Coming from the phone (as opposed to being sent to it).
+    incoming: bool,
+    // Finished and still on this PC, so it can be opened.
+    openable: bool,
+}
 export global Data {
     in-out property <[DeviceItem]> devices;
     in-out property <[FileItem]> files;
@@ -22,6 +32,12 @@ export global Data {
     in-out property <int> dialog: 0;
     in-out property <int> service: -1;
     in-out property <string> notice;
+    // Optional Windows components: a virtual display driver and a virtual audio cable.
+    in-out property <bool> needs-display: false;
+    in-out property <bool> needs-audio: false;
+    in-out property <string> installing: "";
+    // Folder where files received from the phone are saved.
+    in-out property <string> receive-dir;
     in-out property <string> elapsed: "00:00";
     in-out property <int> display-mode: 0;
     in-out property <int> orientation: 0;

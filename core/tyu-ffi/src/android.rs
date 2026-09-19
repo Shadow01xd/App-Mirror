@@ -92,7 +92,10 @@ pub extern "system" fn Java_com_tyu_app_backend_NativeCore_snapshot(
         let h = h.lock().map_err(|_| FAILURE)?;
         let node = h.node.as_ref().ok_or(STATE)?;
         let peers=h.store.peers().map_err(|_|FAILURE)?.into_iter().filter(|p|!p.revoked).map(|p|json!({"id":p.device.id.to_string(),"name":p.device.name,"endpoint":p.endpoint.to_string(),"trusted":true})).collect::<Vec<_>>();
-        Ok::<_, isize>(json!({"id":node.device.id.to_string(),"peers":peers}))
+        // The UDP port is what the USB bridge forwards tunnelled packets to.
+        Ok::<_, isize>(
+            json!({"id":node.device.id.to_string(),"port":node.address.port(),"peers":peers}),
+        )
     });
     output(
         &env,

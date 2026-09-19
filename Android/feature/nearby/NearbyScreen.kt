@@ -50,7 +50,7 @@ fun NearbyScreen(state: NearbyUiState, onSearch: () -> Unit, onPair: (UiDevice) 
             TyuSecondaryButton("Conectar mediante QR", onQr, Modifier.fillMaxWidth(), TyuIcons.Qr)
             if (onUsb != null) {
                 TyuSecondaryButton("Conectar por cable USB", onUsb, Modifier.fillMaxWidth(), TyuIcons.Desktop)
-                TyuFootnote("Activa \"Compartir conexión por USB\": el enlace va por el cable, sin pérdidas ni latencia de Wi-Fi. Si usas datos móviles, desactívalos para no gastarlos.")
+                TyuFootnote("Enchufa el cable y activa \"Depuración USB\". TYU Desktop detecta el teléfono y se conecta solo, como Android Studio. No gasta datos móviles.")
             }
         }
     }

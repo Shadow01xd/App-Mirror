@@ -2,41 +2,68 @@ import { Colors } from "../theme/colors.slint";
 import { Data } from "../data.slint";
 import { TyuButton } from "../components/tyu-button.slint";
 import { TyuProgress } from "../components/tyu-progress.slint";
+
 export component TransferScreen inherits Rectangle {
     background: transparent;
-    VerticalLayout { alignment: start; spacing: 24px;
+    VerticalLayout { alignment: start; spacing: 20px;
         Text { text: "Transferencias"; font-size: 28px; font-weight: 600; color: Colors.text-primary; }
-        Text { text: "Entre este equipo y " + Data.device-name; font-size: 13px; color: Colors.text-secondary; }
-        Rectangle { height: 150px; border-width: 1px; border-color: Colors.border; border-radius: 12px; background: Colors.stage;
-            VerticalLayout { alignment: center; padding: 20px; spacing: 12px;
-                Image { source: @image-url("../../../assets/icons/send.svg"); width: 30px; height: 30px; colorize: Colors.accent; }
-                Text { text: "Envía archivos por tu red local"; color: Colors.text-primary; font-size: 18px; font-weight: 600; horizontal-alignment: center; }
-                Text { text: "Los archivos que recibas del teléfono se guardan en Documentos/TYU."; color: Colors.text-secondary; font-size: 12px; horizontal-alignment: center; wrap: word-wrap; }
+        Text { text: "Entre este equipo y " + Data.device-name + " · por tu red local, sin Internet"; font-size: 13px; color: Colors.text-secondary; }
+
+        // Where downloads land. Shown first because it is what people look for.
+        Rectangle { height: 96px; border-width: 1px; border-color: Colors.border; border-radius: 12px; background: Colors.surface;
+            VerticalLayout { padding: 14px; spacing: 10px;
+                HorizontalLayout { spacing: 8px; alignment: start;
+                    Text { text: "Lo que recibas se guarda en"; font-size: 12px; color: Colors.text-secondary; vertical-alignment: center; }
+                    Text { text: Data.receive-dir; font-size: 12px; font-weight: 600; color: Colors.accent; overflow: elide; vertical-alignment: center; }
+                }
+                HorizontalLayout { height: 34px; spacing: 8px;
+                    TyuButton { label: "Descargas"; secondary: true; width: 118px; clicked => { Data.action("dest-downloads"); } }
+                    TyuButton { label: "Documentos"; secondary: true; width: 126px; clicked => { Data.action("dest-documents"); } }
+                    TyuButton { label: "Otra carpeta…"; secondary: true; width: 138px; clicked => { Data.action("dest-choose"); } }
+                    TyuButton { label: "Abrir carpeta"; secondary: true; width: 132px; clicked => { Data.action("open-destination"); } }
+                }
             }
         }
+
         HorizontalLayout { height: 42px; spacing: 12px;
-            TyuButton { label: "Elegir archivos"; has-icon: true; icon: @image-url("../../../assets/icons/add.svg"); secondary: true; enabled: !Data.transfer-running; clicked => { Data.action("add-files"); } }
-            TyuButton { label: Data.transfer-paused ? "Reanudar" : "Pausar"; enabled: Data.connected && Data.transfer-running; clicked => { Data.action("transfer"); } }
-            TyuButton { label: "Cancelar"; secondary: true; enabled: Data.transfer-running; clicked => { Data.action("cancel-transfer"); } }
+            TyuButton {
+                label: "Enviar archivos al teléfono";
+                has-icon: true;
+                icon: @image-url("../../../assets/icons/send.svg");
+                width: 250px;
+                enabled: Data.connected;
+                clicked => { Data.action("add-files"); }
+            }
+            TyuButton { label: Data.transfer-paused ? "Reanudar" : "Pausar"; secondary: true; width: 120px; enabled: Data.connected && Data.transfer-running; clicked => { Data.action("transfer"); } }
+            TyuButton { label: "Cancelar"; secondary: true; width: 120px; enabled: Data.transfer-running; clicked => { Data.action("cancel-transfer"); } }
+            TyuButton { label: "Limpiar"; secondary: true; width: 110px; enabled: Data.files.length > 0; clicked => { Data.action("clear-transfers"); } }
         }
         if !Data.connected: Text { text: "Conecta un dispositivo para enviar archivos."; font-size: 13px; color: Colors.warning; }
-        HorizontalLayout { height: 24px;
-            Text { text: "Archivo"; font-size: 12px; color: Colors.muted; }
-            Text { text: "Estado"; font-size: 12px; color: Colors.muted; horizontal-alignment: right; }
-        }
-        for file in Data.files: Rectangle { height: 82px; background: transparent;
-            VerticalLayout { spacing: 12px;
-                HorizontalLayout { spacing: 16px;
-                    Image { source: @image-url("../../../assets/icons/folder.svg"); width: 22px; height: 22px; colorize: Colors.text-secondary; }
+
+        for file in Data.files: Rectangle { height: file.openable ? 106px : 78px; background: transparent;
+            VerticalLayout { spacing: 8px;
+                HorizontalLayout { spacing: 14px; height: 40px;
+                    // Direction at a glance: down for something arriving, up for something leaving.
+                    Text {
+                        text: file.incoming ? "↓" : "↑";
+                        font-size: 20px;
+                        color: file.incoming ? Colors.accent : Colors.text-secondary;
+                        vertical-alignment: center;
+                        width: 18px;
+                    }
                     VerticalLayout { spacing: 3px;
-                        Text { text: file.name; font-size: 14px; color: Colors.text-primary; }
-                        Text { text: file.size; font-size: 11px; color: Colors.muted; }
+                        Text { text: file.name; font-size: 14px; color: Colors.text-primary; overflow: elide; }
+                        Text { text: (file.incoming ? "Del teléfono" : "Al teléfono") + " · " + file.size; font-size: 11px; color: Colors.muted; }
                     }
                     Text { text: file.status; font-size: 12px; color: file.progress >= 1 ? Colors.success : Colors.text-secondary; horizontal-alignment: right; vertical-alignment: center; }
                 }
-                TyuProgress { value: file.progress; }
+                if file.progress < 1: TyuProgress { value: file.progress; }
+                if file.openable: HorizontalLayout { height: 32px; spacing: 8px; alignment: start;
+                    TyuButton { label: "Abrir"; secondary: true; width: 100px; clicked => { Data.action("open:" + file.id); } }
+                    TyuButton { label: "Ver en carpeta"; secondary: true; width: 148px; clicked => { Data.action("reveal:" + file.id); } }
+                }
             }
         }
-        if Data.files.length == 0: Text { text: "No hay archivos en la cola."; font-size: 14px; color: Colors.text-secondary; }
+        if Data.files.length == 0: Text { text: "Todavía no hay transferencias. Envía algo desde aquí, o compártelo desde el teléfono."; font-size: 14px; color: Colors.text-secondary; wrap: word-wrap; }
     }
 }

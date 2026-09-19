@@ -15,7 +15,9 @@ import org.json.JSONObject
 
 data class BypassService(val session: String, val stream: String? = null)
 data class BypassFile(val id: String, val name: String, val bytes: Long = 0, val total: Long = 0,
-    val status: String = "Preparando", val path: String? = null, val incoming: Boolean = false)
+    val status: String = "Preparando", val path: String? = null, val incoming: Boolean = false,
+    /** Where a received file was saved, so the app can open it. */
+    val saved: String? = null)
 data class BypassState(val services: Map<String, BypassService> = emptyMap(),
     val storageEnabled: Boolean = false, val files: List<BypassFile> = emptyList(),
     val error: String? = null, val lens: String = "Principal", val noise: Boolean = true)
@@ -99,6 +101,8 @@ class BypassController(private val app: Application, private val scope: Coroutin
     private fun publishReceived(file: BypassFile) = scope.launch(Dispatchers.IO) {
         try {
             val source = File(app.filesDir,"tyu-core/received/${file.name}")
+            // Keep the address of the saved copy so the app can open it straight away.
+            val saved: String
             if (android.os.Build.VERSION.SDK_INT >= 29) {
                 val values = android.content.ContentValues().apply {
                     put(android.provider.MediaStore.Downloads.DISPLAY_NAME,file.name)
@@ -111,13 +115,16 @@ class BypassController(private val app: Application, private val scope: Coroutin
                     values.clear(); values.put(android.provider.MediaStore.Downloads.IS_PENDING,0)
                     app.contentResolver.update(uri,values,null,null)
                 } catch (e: Exception) { app.contentResolver.delete(uri,null,null); throw e }
+                saved = uri.toString()
             } else {
                 @Suppress("DEPRECATION")
                 val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),"TYU").apply {mkdirs()}
-                source.copyTo(File(dir,file.name),overwrite=false)
+                val copy = File(dir,file.name)
+                source.copyTo(copy,overwrite=false)
+                saved = Uri.fromFile(copy).toString()
             }
             source.delete()
-            mutable.update { it.copy(files=it.files.map { f -> if(f.id==file.id) f.copy(status="Guardado en Descargas/TYU") else f }) }
+            mutable.update { it.copy(files=it.files.map { f -> if(f.id==file.id) f.copy(status="Guardado en Descargas/TYU", saved=saved) else f }) }
         } catch (e: Exception) {
             if(e is CancellationException) throw e
             error("El archivo se recibió, pero no pudo guardarse en Descargas/TYU: ${e.message}")

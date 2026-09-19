@@ -64,6 +64,13 @@ pub enum TyuCommand {
     Connect {
         peer: DeviceId,
     },
+    /// Connects to an already trusted peer at an address discovery cannot know about, such as
+    /// the local end of a USB tunnel. The peer is still authenticated by its stored fingerprint,
+    /// so an address alone can never impersonate a device.
+    ConnectAt {
+        peer: DeviceId,
+        endpoint: std::net::SocketAddr,
+    },
     Disconnect {
         peer: DeviceId,
     },
@@ -184,7 +191,7 @@ pub enum TyuEvent {
     },
     Connected {
         device: DeviceInfo,
-        /// Peer endpoint the winning QUIC connection uses (Wi-Fi, USB tether, ...).
+        /// Peer endpoint the winning QUIC connection uses (the network, a cable tunnel, ...).
         address: SocketAddr,
     },
     Disconnected {

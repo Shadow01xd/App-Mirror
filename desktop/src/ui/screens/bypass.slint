@@ -3,6 +3,7 @@ import { Typography } from "../theme/typography.slint";
 import { Spacing } from "../theme/spacing.slint";
 import { Data } from "../data.slint";
 import { TyuButton } from "../components/tyu-button.slint";
+import { TyuComponentNotice } from "../components/tyu-component-notice.slint";
 
 export component BypassScreen inherits Rectangle {
     background: transparent;
@@ -11,8 +12,8 @@ export component BypassScreen inherits Rectangle {
         spacing: Spacing.md;
         alignment: start;
         for item in [
-            { name: "Cámara", detail: "TYU Camera · 720p / 30 fps", key: "camera", active: Data.camera },
-            { name: "Micrófono", detail: "TYU Microphone · 48 kHz", key: "microphone", active: Data.microphone },
+            { name: "Cámara", detail: "«TYU Camera (Windows Virtual Camera)» · 720p / 30 fps", key: "camera", active: Data.camera },
+            { name: "Micrófono", detail: "El teléfono como micrófono · 48 kHz", key: "microphone", active: Data.microphone },
             { name: "Almacenamiento", detail: "TYU: " + Data.device-name + " · Explorador de Windows", key: "storage", active: Data.storage }
         ]: HorizontalLayout { spacing: 18px; height: 64px;
             VerticalLayout { spacing: 4px;
@@ -21,8 +22,14 @@ export component BypassScreen inherits Rectangle {
             }
             TyuButton { label: item.active ? "Desactivar" : "Activar"; secondary: true; width: 120px; clicked => { Data.toggle(item.key, !item.active); } }
         }
+        if Data.needs-audio: TyuComponentNotice {
+            message: "Sin un cable de audio virtual el teléfono se oye por los altavoces, pero no puede elegirse como micrófono.";
+            source: "Voicemeeter · VB-Audio Software · donationware · se descarga de su web oficial";
+            command: "install-audio";
+            busy: Data.installing != "";
+        }
         HorizontalLayout { spacing: 12px; height: 42px;
-            TyuButton { label: "Abrir teléfono"; secondary: true; enabled: Data.storage; clicked => { Data.action("open-storage"); } }
+            TyuButton { label: "Abrir teléfono"; secondary: true; clicked => { Data.action("open-storage"); } }
             TyuButton { label: "Transferir archivos"; clicked => { Data.option("page", 1); } }
         }
         Text { text: "Todo viaja por la red local. Archivos recibidos en Documentos/TYU."; color: Colors.text-secondary; font-size: 12px; wrap: word-wrap; }

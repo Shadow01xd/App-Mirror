@@ -3,6 +3,7 @@ import { Data } from "../data.slint";
 import { TyuButton } from "../components/tyu-button.slint";
 import { TyuDeviceStage } from "../components/tyu-device-stage.slint";
 import { TyuModeSelector } from "../components/tyu-mode-selector.slint";
+import { TyuComponentNotice } from "../components/tyu-component-notice.slint";
 import { BypassScreen } from "bypass.slint";
 export component HomeScreen inherits Rectangle {
     in property <bool> compact: false;
@@ -17,6 +18,14 @@ export component HomeScreen inherits Rectangle {
                 Text { text: Data.device-name; color: Colors.text-primary; font-size: 28px; font-weight: 600; overflow: elide; }
                 Text { text: Data.link-label; color: Colors.success; font-size: 13px; }
             }
+            // Moving a live Wi-Fi link onto the cable needs an explicit ask: TYU never hangs up
+            // a working connection on its own just because something got plugged in.
+            if Data.link-label != "Conectado por USB": TyuButton {
+                label: "Usar cable";
+                secondary: true;
+                width: 120px;
+                clicked => { Data.action("use-cable"); }
+            }
             TyuButton { label: "Desconectar"; secondary: true; width: 130px; clicked => { Data.action("disconnect"); } }
         }
         TyuDeviceStage { height: root.compact ? 240px : 330px; }
@@ -26,6 +35,12 @@ export component HomeScreen inherits Rectangle {
             Text { text: Data.mode == 0 ? "PC → Teléfono · Usa tu teléfono como segunda pantalla." : Data.mode == 1 ? "Teléfono → PC · Visualiza tu teléfono en el escritorio." : "PC ↔ Teléfono · Conecta los recursos de ambos equipos."; color: Colors.text-secondary; font-size: 13px; wrap: word-wrap; }
         }
         TyuModeSelector { selected-index: Data.mode; selected(i) => { Data.option("mode", i); } }
+        if Data.mode == 0 && Data.needs-display: TyuComponentNotice {
+            message: "Para que el teléfono sea una pantalla extendida de verdad falta el controlador de pantalla de Windows.";
+            source: "Parsec Virtual Display Driver · Parsec Cloud Inc. · licencia propietaria · se descarga de su web oficial";
+            command: "install-display";
+            busy: Data.installing != "";
+        }
         if Data.mode == 2: BypassScreen {}
         if Data.mode != 2: TyuButton {
             label: Data.active ? "Detener" : "Iniciar";

@@ -19,6 +19,6 @@ fun MicrophoneActiveScreen(computer: String, onStop: () -> Unit, onBack: () -> U
     TyuActiveService("Micrófono activo", "Tu voz, en $computer.", computer,
         MicrophoneIcon, onStop, onBack) {
         if (!live) TyuAudioStage(active = true)
-        TyuFootnote(if (live) "Audio 48 kHz por Wi-Fi · Selecciona TYU Microphone como micrófono en el PC" else "Nivel ilustrativo · sin captura de audio")
+        TyuFootnote(if (live) "Audio 48 kHz en directo · TYU Desktop te indica qué micrófono elegir en el PC" else "Nivel ilustrativo · sin captura de audio")
     }
 }

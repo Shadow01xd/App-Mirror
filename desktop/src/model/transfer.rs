@@ -21,6 +21,9 @@ pub struct Transfer {
     pub total_bytes: u64,
     pub transferred_bytes: u64,
     pub status: TransferStatus,
+    /// Where the file lives on this PC: the source for a send, the delivered copy for a
+    /// download. `None` until a download finishes.
+    pub path: Option<String>,
 }
 
 impl Transfer {

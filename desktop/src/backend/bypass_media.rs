@@ -82,7 +82,7 @@ impl Receivers {
                                         session,
                                         service,
                                         active: true,
-                                        message: "Cámara disponible: selecciona TYU Camera".into(),
+                                        message: "Cámara lista: en tus apps elige «TYU Camera (Windows Virtual Camera)»".into(),
                                     });
                                 }
                             }
@@ -164,7 +164,7 @@ fn microphone(
                 session,
                 service: ServiceKind::Microphone,
                 active: true,
-                message: "Micrófono disponible: selecciona TYU Microphone".into(),
+                message: microphone.label(),
             });
         }
     }

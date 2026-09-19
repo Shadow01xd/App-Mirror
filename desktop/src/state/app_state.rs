@@ -27,8 +27,15 @@ pub struct AppState {
     pub transfer_paused: bool,
     pub history: Vec<String>,
     pub notice: String,
-    /// How the selected phone is reached: "Wi-Fi" or "USB" (tethered cable).
+    /// How the selected phone is reached: "Wi-Fi" or "USB" (the ADB cable tunnel).
     pub link: String,
+    /// Folder where files received from the phone are saved.
+    pub receive_dir: String,
+    /// Optional components Windows needs for a real second monitor / a real microphone.
+    pub needs_display: bool,
+    pub needs_audio: bool,
+    /// Name of the component being installed right now, empty when idle.
+    pub installing: String,
     pub elapsed_ticks: u64,
     pub scan_ticks: u32,
     notice_ticks: u32,

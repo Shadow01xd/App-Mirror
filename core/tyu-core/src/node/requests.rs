@@ -75,6 +75,25 @@ impl Actor {
                 };
                 self.connect(peer, addresses, identity, None).await?;
             }
+            TyuCommand::ConnectAt { peer, endpoint } => {
+                let trusted = self
+                    .context
+                    .store
+                    .peers()?
+                    .into_iter()
+                    .find(|p| p.device.id == peer)
+                    .ok_or(TyuErrorCode::NotAvailable)?;
+                if trusted.revoked {
+                    return Err(TyuErrorCode::Revoked.into());
+                }
+                self.connect(
+                    peer,
+                    vec![endpoint],
+                    transport::ServerIdentity::Trusted(trusted.fingerprint),
+                    None,
+                )
+                .await?;
+            }
             TyuCommand::Disconnect { peer } => {
                 self.remove(peer).await;
             }

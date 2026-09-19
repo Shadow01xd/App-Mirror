@@ -35,6 +35,24 @@ import com.tyu.app.feature.sessions.*
 import com.tyu.app.feature.settings.*
 import com.tyu.app.model.*
 import com.tyu.app.ui.components.TyuDialog
+import android.app.Application
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStoreOwner
+
+/**
+ * The connection, scoped to the application rather than this screen, so navigating away or
+ * closing the Activity does not hang up. Falls back to the screen's own scope where the app
+ * class is not in play (tests, previews).
+ */
+@Composable
+private fun sessionBackend(): ConnectionViewModel {
+    val application = LocalContext.current.applicationContext
+    val owner = application as? ViewModelStoreOwner ?: return viewModel()
+    return viewModel(
+        viewModelStoreOwner = owner,
+        factory = ViewModelProvider.AndroidViewModelFactory.getInstance(application as Application),
+    )
+}
 
 @Composable
 fun TyuNavGraph(fixture: Boolean = false, pairingUri: String? = null) {
@@ -43,7 +61,7 @@ fun TyuNavGraph(fixture: Boolean = false, pairingUri: String? = null) {
 
 /** Existing Compose surfaces, driven only by actual native connection events. */
 @Composable
-private fun TyuConnectedNavGraph(pairingUri: String?, backend: ConnectionViewModel = viewModel()) {
+private fun TyuConnectedNavGraph(pairingUri: String?, backend: ConnectionViewModel = sessionBackend()) {
     val state by backend.state.collectAsState()
     val bypass by backend.bypass.state.collectAsState()
     BypassEffects(backend)
@@ -141,6 +159,28 @@ private fun TyuConnectedNavGraph(pairingUri: String?, backend: ConnectionViewMod
         Toast.makeText(context, "Activa \"TYU control táctil\". En Android 13+ puede pedir \"Permitir ajustes restringidos\" en Información de la app.", Toast.LENGTH_LONG).show()
         runCatching { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }
+    /// TYU reaches this phone over the cable the same way Android Studio does, so what the user
+    /// has to switch on is USB debugging, inside Developer options. Nagging someone who already
+    /// turned it on is the fastest way to make them think the feature is broken, so this checks
+    /// first and only sends them to Settings when there is something to change.
+    fun openUsbDebugging() {
+        val enabled = runCatching {
+            Settings.Global.getInt(context.contentResolver, Settings.Global.ADB_ENABLED, 0) == 1
+        }.getOrDefault(false)
+        if (enabled) {
+            Toast.makeText(context, "La depuración USB ya está activa. Enchufa el cable y abre TYU en el PC: se conectará solo.", Toast.LENGTH_LONG).show()
+            return
+        }
+        Toast.makeText(context, "Activa \"Depuración USB\" y acepta la huella del PC. Si no ves Opciones de desarrollador, toca 7 veces \"Número de compilación\" en Acerca del teléfono.", Toast.LENGTH_LONG).show()
+        val screens = listOf(
+            Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS),
+            Intent(Settings.ACTION_DEVICE_INFO_SETTINGS),
+            Intent(Settings.ACTION_SETTINGS),
+        )
+        screens.any { screen ->
+            runCatching { context.startActivity(screen.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
+        }
+    }
     LaunchedEffect(state.accessibilityMissing) {
         if (state.accessibilityMissing) {
             openAccessibility()
@@ -176,11 +216,7 @@ private fun TyuConnectedNavGraph(pairingUri: String?, backend: ConnectionViewMod
                 onPair = { ui -> selectedId = ui.id; state.peers.find { it.id == ui.id }?.let(backend::connect) },
                 onQr = { navigate(TyuRoute.Qr) }, onBack = ::back,
                 onSettings = { navigate(TyuRoute.Settings) }, devices = state.peers.map { it.ui() },
-                onUsb = {
-                    Toast.makeText(context, "Conecta el cable y activa \"Compartir conexión por USB\"; TYU te preguntará si quieres conectarte por USB.", Toast.LENGTH_LONG).show()
-                    runCatching { context.startActivity(Intent("android.settings.TETHER_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                        .onFailure { runCatching { context.startActivity(Intent(Settings.ACTION_WIRELESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
-                })
+                onUsb = ::openUsbDebugging)
             TyuRoute.Qr, TyuRoute.Connecting, TyuRoute.ConnectionError -> PairingScreen(
                 state = if (current == TyuRoute.Connecting) PairingUiState.Connecting else if (current == TyuRoute.ConnectionError) PairingUiState.Error else PairingUiState.Qr,
                 device = device, onContinue = { backend.pair(invitation) }, onCancel = ::back,
@@ -235,8 +271,4 @@ private fun TyuConnectedNavGraph(pairingUri: String?, backend: ConnectionViewMod
     }
     if (showError) TyuDialog("Conexión TYU", state.error ?: "El código no es una invitación TYU válida", "Aceptar",
         { showError = false; backend.clearError() }, { showError = false; backend.clearError() })
-    state.usbOffer?.let { offer ->
-        TyuDialog("Cable USB detectado", "${offer.name} está conectado por cable. ¿Te quieres conectar por medio de USB?",
-            "Conectar", { selectedId = offer.id; backend.answerUsb(true) }, { backend.answerUsb(false) })
-    }
 }

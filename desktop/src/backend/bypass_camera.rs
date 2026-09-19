@@ -107,3 +107,88 @@ impl Drop for Camera {
         let _ = self.host.wait();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use windows::Win32::Media::MediaFoundation::{
+        IMFActivate, MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME, MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE,
+        MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID, MF_VERSION, MFCreateAttributes,
+        MFEnumDeviceSources, MFSTARTUP_FULL, MFStartup,
+    };
+    use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx, CoTaskMemFree};
+
+    /// Names of every video capture device Windows apps can pick.
+    fn cameras() -> Vec<String> {
+        unsafe {
+            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+            let _ = MFStartup(MF_VERSION, MFSTARTUP_FULL);
+            let mut attributes = None;
+            MFCreateAttributes(&mut attributes, 1).unwrap();
+            let attributes = attributes.unwrap();
+            attributes
+                .SetGUID(
+                    &MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE,
+                    &MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID,
+                )
+                .unwrap();
+            let mut list: *mut Option<IMFActivate> = std::ptr::null_mut();
+            let mut count = 0u32;
+            MFEnumDeviceSources(&attributes, &mut list, &mut count).unwrap();
+            let names = (0..count as usize)
+                .filter_map(|i| {
+                    let device = std::ptr::read(list.add(i))?;
+                    let mut name = windows::core::PWSTR::null();
+                    let mut length = 0u32;
+                    device
+                        .GetAllocatedString(
+                            &MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME,
+                            &mut name,
+                            &mut length,
+                        )
+                        .ok()?;
+                    let text = name.to_string().ok();
+                    CoTaskMemFree(Some(name.as_ptr().cast()));
+                    text
+                })
+                .collect();
+            CoTaskMemFree(Some(list as *const _));
+            names
+        }
+    }
+
+    /// With the component installed, activating Bypass camera publishes "TYU Camera" to every
+    /// Windows app; skipped where the component is not installed.
+    #[test]
+    fn tyu_camera_is_listed_as_a_windows_camera_while_active() {
+        let camera = match Camera::new() {
+            Ok(camera) => camera,
+            Err(error) => {
+                eprintln!("TYU Camera not installed here: {error}; skipping");
+                return;
+            }
+        };
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let names = cameras();
+            if names.iter().any(|n| n.starts_with("TYU Camera")) {
+                eprintln!("cameras: {names:?}");
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "TYU Camera missing from {names:?}"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(250));
+        }
+        drop(camera);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while cameras().iter().any(|n| n.starts_with("TYU Camera")) {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "TYU Camera still listed after stop"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(250));
+        }
+    }
+}

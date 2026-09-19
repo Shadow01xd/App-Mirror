@@ -1,6 +1,8 @@
 package com.tyu.app.feature.transfer
 
+import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -21,18 +23,40 @@ fun TransferScreen(computer: String, onSend: () -> Unit, onQueue: () -> Unit,
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) onSelected?.invoke(uris)
     }
+    fun open(file: BypassFile) {
+        val uri = file.saved?.let(Uri::parse) ?: return
+        val intent = Intent(Intent.ACTION_VIEW)
+            .setDataAndType(uri, context.contentResolver.getType(uri) ?: "*/*")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { context.startActivity(intent) }
+            .onFailure { Toast.makeText(context, "No hay ninguna app para abrir este archivo", Toast.LENGTH_SHORT).show() }
+    }
+    // Received files come first: that is what someone opens the screen to find.
+    val ordered = files.sortedByDescending { it.incoming && it.saved != null }
     TyuPage(onBack = onBack) {
-        TyuHeading("Enviar a $computer", "Elige archivos del teléfono para copiarlos a Documentos/TYU en tu PC.")
-        TyuButton("Elegir archivos y enviar", { if (onSelected != null) picker.launch(arrayOf("*/*")) else onSend() }, Modifier.fillMaxWidth(), TransferIcon)
-        if (files.isEmpty()) TyuFootnote("Todavía no hay transferencias. Los archivos viajan por tu red local, sin Internet.")
-        files.forEach { file ->
+        TyuHeading("Archivos con $computer",
+            "Envía desde aquí, o recibe lo que te manden desde el PC. Todo viaja por tu red local.")
+        TyuButton("Enviar archivos al PC", { if (onSelected != null) picker.launch(arrayOf("*/*")) else onSend() },
+            Modifier.fillMaxWidth(), TransferIcon)
+        TyuFootnote("Lo que recibas se guarda en Descargas/TYU de este teléfono.")
+        if (files.isEmpty()) {
+            TyuFootnote("Todavía no hay transferencias.")
+        }
+        ordered.forEach { file ->
+            val active = file.status in listOf("Enviando", "Transfiriendo", "Recibiendo")
             TyuCard {
-                Text(file.name, style = MaterialTheme.typography.titleMedium)
-                Text(file.status + " · " + android.text.format.Formatter.formatShortFileSize(context,file.bytes) + " / " + android.text.format.Formatter.formatShortFileSize(context,file.total),color=TyuColors.Secondary)
-                if (file.status in listOf("Enviando","Transfiriendo","Recibiendo")) {
-                    LinearProgressIndicator(progress = { if(file.total>0) (file.bytes.toFloat()/file.total).coerceIn(0f,1f) else 0f },modifier=Modifier.fillMaxWidth())
-                    if (file.path != null) TyuSecondaryButton("Cancelar", { onCancel(file.id) },Modifier.fillMaxWidth())
+                Text((if (file.incoming) "↓ " else "↑ ") + file.name, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    (if (file.incoming) "Del PC" else "Al PC") + " · " + file.status +
+                        if (file.total > 0) " · " + android.text.format.Formatter.formatShortFileSize(context, file.total) else "",
+                    color = TyuColors.Secondary)
+                if (active) {
+                    LinearProgressIndicator(
+                        progress = { if (file.total > 0) (file.bytes.toFloat() / file.total).coerceIn(0f, 1f) else 0f },
+                        modifier = Modifier.fillMaxWidth())
+                    if (file.path != null) TyuSecondaryButton("Cancelar", { onCancel(file.id) }, Modifier.fillMaxWidth())
                 }
+                if (file.saved != null) TyuSecondaryButton("Abrir", { open(file) }, Modifier.fillMaxWidth())
             }
         }
     }

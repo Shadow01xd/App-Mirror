@@ -118,6 +118,19 @@ impl Drop for VirtualDisplay {
     }
 }
 
+/// Whether the virtual display driver is installed and reachable.
+pub fn driver_installed() -> bool {
+    match open_device() {
+        Some(handle) => {
+            unsafe {
+                let _ = CloseHandle(handle);
+            }
+            true
+        }
+        None => false,
+    }
+}
+
 fn open_device() -> Option<HANDLE> {
     unsafe {
         let set = SetupDiGetClassDevsW(

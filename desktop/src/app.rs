@@ -1,5 +1,5 @@
 use crate::{
-    model::{ConnectionState, TransferStatus},
+    model::{ConnectionState, TransferDirection, TransferStatus},
     state::AppState,
 };
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
@@ -12,6 +12,17 @@ fn stable_model<T: Clone + PartialEq + 'static>(current: ModelRc<T>, rows: Vec<T
         current
     } else {
         ModelRc::new(VecModel::from(rows))
+    }
+}
+
+/// Sizes people recognise: 870 kB rather than 0.9 MB, 1.4 GB rather than 1400.0 MB.
+fn human_size(bytes: u64) -> String {
+    match bytes {
+        0 => "—".into(),
+        b if b < 1_000 => format!("{b} B"),
+        b if b < 1_000_000 => format!("{} kB", b / 1_000),
+        b if b < 1_000_000_000 => format!("{:.1} MB", b as f64 / 1e6),
+        b => format!("{:.2} GB", b as f64 / 1e9),
     }
 }
 
@@ -43,8 +54,9 @@ pub fn sync(window: &DesktopShell, state: &AppState) {
             .items
             .iter()
             .map(|f| FileItem {
+                id: f.id.clone().into(),
                 name: f.file_name.clone().into(),
-                size: format!("{:.1} MB", f.total_bytes as f64 / 1_000_000.0).into(),
+                size: human_size(f.total_bytes).into(),
                 progress: f.progress(),
                 status: match &f.status {
                     TransferStatus::Queued => "En cola".into(),
@@ -55,6 +67,8 @@ pub fn sync(window: &DesktopShell, state: &AppState) {
                         format!("{} %", (f.progress() * 100.0) as u32).into()
                     }
                 },
+                incoming: f.direction == TransferDirection::Receive,
+                openable: f.status == TransferStatus::Completed && f.path.is_some(),
             })
             .collect::<Vec<_>>(),
     ));
@@ -78,6 +92,10 @@ pub fn sync(window: &DesktopShell, state: &AppState) {
     data.set_dialog(state.dialog);
     data.set_service(state.service);
     data.set_notice(state.notice.clone().into());
+    data.set_receive_dir(state.receive_dir.clone().into());
+    data.set_needs_display(state.needs_display);
+    data.set_needs_audio(state.needs_audio);
+    data.set_installing(state.installing.clone().into());
     data.set_elapsed(
         format!(
             "{:02}:{:02}",
@@ -169,6 +187,9 @@ pub fn run() -> Result<(), slint::PlatformError> {
     if !legacy {
         window.global::<Data>().set_pairing_instructions("En Android, selecciona este equipo en la búsqueda o escanea el QR. Ambos deben estar en la misma red Wi-Fi. Después acepta la solicitud aquí.".into());
     }
+    if let Some(bridge) = &backend {
+        bridge.borrow().refresh_settings(&mut state.borrow_mut());
+    }
     let pairing = if legacy {
         match crate::pairing::PairingServer::start() {
             Ok(server) => Some(Rc::new(server)),
@@ -191,7 +212,16 @@ pub fn run() -> Result<(), slint::PlatformError> {
     {
         let mut s = state.borrow_mut();
         // Fixtures are opt-in captures only, never the normal startup state.
-        if matches!(view.as_str(), "connected" | "mirror" | "bypass" | "active") {
+        if matches!(
+            view.as_str(),
+            "connected"
+                | "mirror"
+                | "bypass"
+                | "active"
+                | "components"
+                | "components-bypass"
+                | "transfers"
+        ) {
             s.connect_peer("Mi teléfono".into(), "screenshot-fixture".into());
         }
         match view.as_str() {
@@ -215,6 +245,50 @@ pub fn run() -> Result<(), slint::PlatformError> {
                 }
             }
             "camera" => s.option("service", 0),
+            // What a PC without the optional Windows components shows.
+            "components" => {
+                s.needs_display = true;
+                s.needs_audio = true;
+            }
+            // The transfer page with a send, a finished download and one in flight.
+            "transfers" => {
+                s.option("page", 1);
+                s.receive_dir = r"C:\Users\tu-usuario\Downloads\TYU".into();
+                s.transfers.items = vec![
+                    crate::model::Transfer {
+                        id: "a".into(),
+                        file_name: "presentacion.pdf".into(),
+                        direction: crate::model::TransferDirection::Send,
+                        total_bytes: 2_400_000,
+                        transferred_bytes: 2_400_000,
+                        status: TransferStatus::Completed,
+                        path: Some("C:/tmp/presentacion.pdf".into()),
+                    },
+                    crate::model::Transfer {
+                        id: "b".into(),
+                        file_name: "foto-vacaciones.jpg".into(),
+                        direction: crate::model::TransferDirection::Receive,
+                        total_bytes: 4_800_000,
+                        transferred_bytes: 4_800_000,
+                        status: TransferStatus::Completed,
+                        path: Some("C:/tmp/foto-vacaciones.jpg".into()),
+                    },
+                    crate::model::Transfer {
+                        id: "c".into(),
+                        file_name: "video-largo.mp4".into(),
+                        direction: crate::model::TransferDirection::Receive,
+                        total_bytes: 1_800_000_000,
+                        transferred_bytes: 700_000_000,
+                        status: TransferStatus::InProgress,
+                        path: None,
+                    },
+                ];
+            }
+            "components-bypass" => {
+                s.option("mode", 2);
+                s.needs_display = true;
+                s.needs_audio = true;
+            }
             _ => {}
         }
         s.notice.clear();

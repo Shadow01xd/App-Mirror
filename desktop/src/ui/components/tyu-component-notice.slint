@@ -1,0 +1,42 @@
+import { Colors } from "../theme/colors.slint";
+import { Data } from "../data.slint";
+import { TyuButton } from "tyu-button.slint";
+
+// Offers the one optional Windows component a mode needs. Windows has no user-mode way to add
+// a display or a microphone, so those two capabilities come from a signed driver installed on
+// demand; everything else in TYU works with nothing extra.
+export component TyuComponentNotice inherits Rectangle {
+    in property <string> message;
+    in property <string> command;
+    // Who publishes it and under what terms: the user accepts those terms by pressing Install,
+    // so the name and the licence belong on screen, not buried in a log.
+    in property <string> source;
+    in property <bool> busy: false;
+    height: 66px;
+    background: Colors.surface;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: Colors.border;
+    HorizontalLayout {
+        padding: 14px;
+        spacing: 16px;
+        VerticalLayout {
+            spacing: 4px;
+            alignment: center;
+            Text { text: root.message; color: Colors.text-primary; font-size: 13px; wrap: word-wrap; }
+            Text {
+                text: root.busy ? "Instalando… Windows te pedirá confirmación." : root.source;
+                color: Colors.text-secondary;
+                font-size: 11px;
+                wrap: word-wrap;
+            }
+        }
+        TyuButton {
+            label: root.busy ? "Instalando…" : "Instalar";
+            secondary: true;
+            width: 130px;
+            enabled: !root.busy;
+            clicked => { Data.action(root.command); }
+        }
+    }
+}

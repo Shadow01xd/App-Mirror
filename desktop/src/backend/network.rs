@@ -1,24 +1,9 @@
 use std::net::{IpAddr, Ipv4Addr, UdpSocket};
 
-/// "USB" when the peer is reached through a local interface other than the routed Wi-Fi one
-/// (a phone sharing its connection over the cable shows up as a separate RNDIS network), else
-/// "Wi-Fi". Heuristic: same /24 as that interface, different /24 from the routed address.
+/// How a connected peer is reached. A cable link goes through the local ADB tunnel, so the
+/// phone answers from loopback; anything else came over the network.
 pub fn link_label(peer: IpAddr) -> &'static str {
-    let IpAddr::V4(peer) = peer else {
-        return "Wi-Fi";
-    };
-    let same_subnet = |a: Ipv4Addr, b: Ipv4Addr| a.octets()[..3] == b.octets()[..3];
-    if let IpAddr::V4(routed) = pairing_ip()
-        && same_subnet(routed, peer)
-    {
-        return "Wi-Fi";
-    }
-    let direct = if_addrs::get_if_addrs()
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|i| !i.is_loopback())
-        .any(|i| matches!(i.ip(), IpAddr::V4(local) if same_subnet(local, peer)));
-    if direct { "USB" } else { "Wi-Fi" }
+    if peer.is_loopback() { "USB" } else { "Wi-Fi" }
 }
 
 /// Ask the OS routing table for its preferred IPv4 source address. UDP connect
@@ -54,6 +39,14 @@ fn select_ip(addresses: &[IpAddr], routed: Option<IpAddr>) -> IpAddr {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// The cable tunnel terminates on loopback; a phone on the network never does.
+    #[test]
+    fn a_tunnelled_phone_is_labelled_usb() {
+        assert_eq!(link_label("127.0.0.1".parse().unwrap()), "USB");
+        assert_eq!(link_label("192.168.1.42".parse().unwrap()), "Wi-Fi");
+        assert_eq!(link_label("10.0.0.7".parse().unwrap()), "Wi-Fi");
+    }
+
     #[test]
     fn qr_prefers_routed_wifi_over_first_virtual_interface() {
         let virtual_ip = "192.168.56.1".parse().unwrap();

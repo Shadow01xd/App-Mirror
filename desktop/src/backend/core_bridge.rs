@@ -1,5 +1,8 @@
 //! Adapts domain events to existing Desktop state. Slint owns presentation only.
+use super::components;
+use super::downloads;
 use super::runtime::BackendRuntime;
+use super::usb;
 use super::virtual_display::VirtualDisplay;
 use super::windows_capture;
 use crate::{
@@ -36,6 +39,12 @@ pub struct CoreBridge {
         std::sync::mpsc::Sender<Touch>,
         std::sync::mpsc::Receiver<Touch>,
     ),
+    /// A winget install of an optional component running in the background.
+    install: Option<components::Install>,
+    /// Phones appearing on and leaving the USB cable.
+    usb_events: std::sync::mpsc::Receiver<usb::UsbEvent>,
+    /// The tunnel to the phone currently on the cable; dropping it closes the forward.
+    cable: Option<usb::Cable>,
 }
 /// (kind, normalized x, normalized y) as emitted by the mirror surfaces.
 type Touch = (String, f32, f32);
@@ -75,6 +84,9 @@ impl CoreBridge {
             popout_visible: false,
             popout_size: None,
             popout_input: std::sync::mpsc::channel(),
+            install: None,
+            usb_events: usb::watch(),
+            cable: None,
         })
     }
     fn selected(&self, state: &AppState) -> Option<DeviceId> {
@@ -84,6 +96,19 @@ impl CoreBridge {
             .get(state.selected_device)
             .and_then(|d| d.id.parse().ok())
             .map(DeviceId)
+    }
+    /// The phone an action should act on. Anything that operates over a live link (sending a
+    /// file, opening its storage, hanging up) means *the connected* phone — which is not always
+    /// the row highlighted in the sidebar, and getting that wrong made those buttons do nothing.
+    fn active(&self, state: &AppState) -> Option<DeviceId> {
+        state
+            .devices
+            .nearby
+            .iter()
+            .find(|d| d.connection == ConnectionState::Connected)
+            .and_then(|d| d.id.parse().ok())
+            .map(DeviceId)
+            .or_else(|| self.selected(state))
     }
     fn send(&self, state: &mut AppState, command: TyuCommand) {
         if let Err(error) = self.runtime.send(command) {
@@ -107,16 +132,50 @@ impl CoreBridge {
                 state.pending_name.clear();
             }
             "discover" => self.send(state, TyuCommand::StartDiscovery),
+            "install-display" | "install-audio" => {
+                if self.install.is_none() {
+                    let component = if command == "install-display" {
+                        components::Component::Display
+                    } else {
+                        components::Component::AudioCable
+                    };
+                    state.installing = component.name().into();
+                    state.notice = format!(
+                        "Descargando el {} del fabricante; confirma el aviso de Windows",
+                        component.name()
+                    );
+                    self.install = Some(components::install(component));
+                }
+            }
             "connect" | "confirm-pair" => {
                 if let Some(peer) = self.selected(state) {
                     self.send(state, TyuCommand::Connect { peer });
                 }
             }
             "disconnect" => {
-                if let Some(peer) = self.selected(state) {
+                if let Some(peer) = self.active(state) {
                     self.send(state, TyuCommand::Disconnect { peer });
                 }
             }
+            // Hang up whatever link is up and come back over the cable, for someone on Wi-Fi who
+            // just plugged the phone in.
+            "use-cable" => match usb::devices_ready().first() {
+                Some(serial) => {
+                    let serial = serial.clone();
+                    if let Some(peer) = self.active(state) {
+                        self.send(state, TyuCommand::Disconnect { peer });
+                    }
+                    self.cable = None;
+                    self.cable_event(usb::UsbEvent::Attached(serial), state);
+                }
+                None => {
+                    state.notice = if usb::adb().is_none() {
+                        "Para el cable hace falta adb; instálalo o usa Wi-Fi".into()
+                    } else {
+                        "No hay ningún teléfono con depuración USB en el cable".into()
+                    }
+                }
+            },
             "forget" => {
                 if let Some(peer) = self.selected(state) {
                     self.send(state, TyuCommand::ForgetPeer { peer });
@@ -177,11 +236,15 @@ impl CoreBridge {
                 }
             }
             "add-files" => {
-                if let Some(peer) = self.selected(state)
-                    && let Some(paths) = rfd::FileDialog::new()
-                        .set_title("Enviar archivos al teléfono")
-                        .pick_files()
+                let Some(peer) = self.active(state) else {
+                    state.notice = "Conecta un teléfono para enviarle archivos".into();
+                    return;
+                };
+                if let Some(paths) = rfd::FileDialog::new()
+                    .set_title("Enviar archivos al teléfono")
+                    .pick_files()
                 {
+                    let count = paths.len();
                     for path in paths {
                         let id = TransferId::new();
                         state.transfers.items.push(Transfer {
@@ -195,9 +258,73 @@ impl CoreBridge {
                             total_bytes: path.metadata().map(|m| m.len()).unwrap_or(0),
                             transferred_bytes: 0,
                             status: TransferStatus::Queued,
+                            path: Some(path.to_string_lossy().into_owned()),
                         });
                         self.send(state, TyuCommand::SendFile { peer, id, path });
                     }
+                    state.notice = match count {
+                        1 => "Enviando 1 archivo al teléfono".into(),
+                        n => format!("Enviando {n} archivos al teléfono"),
+                    };
+                }
+            }
+            "dest-downloads" | "dest-documents" | "dest-choose" => {
+                let chosen = match command {
+                    "dest-downloads" => Some(downloads::downloads()),
+                    "dest-documents" => Some(downloads::documents()),
+                    _ => rfd::FileDialog::new()
+                        .set_title("¿Dónde quieres guardar lo que recibas?")
+                        .set_directory(downloads::destination())
+                        .pick_folder(),
+                };
+                if let Some(path) = chosen {
+                    state.notice = match downloads::set_destination(&path) {
+                        Ok(()) => {
+                            state.receive_dir = path.to_string_lossy().into_owned();
+                            format!("Lo que recibas se guardará en {}", state.receive_dir)
+                        }
+                        Err(error) => format!("No se pudo guardar la carpeta: {error}"),
+                    };
+                }
+            }
+            "open-destination" => {
+                let folder = std::path::PathBuf::from(&state.receive_dir);
+                let _ = std::fs::create_dir_all(&folder);
+                if let Err(error) = downloads::open(&folder) {
+                    state.notice = format!("No se pudo abrir la carpeta: {error}");
+                }
+            }
+            // Everything that is not still moving: finished, failed and never-started alike.
+            // Only clearing completed ones left failures stuck on screen for good.
+            "clear-transfers" => {
+                state
+                    .transfers
+                    .items
+                    .retain(|t| t.status == TransferStatus::InProgress);
+                state.notice = "Lista de transferencias limpiada".into();
+            }
+            // Per-file buttons carry the transfer id: "open:<id>" and "reveal:<id>".
+            _ if command.starts_with("open:") || command.starts_with("reveal:") => {
+                let (verb, id) = command.split_once(':').unwrap_or_default();
+                let target = state
+                    .transfers
+                    .items
+                    .iter()
+                    .find(|t| t.id == id)
+                    .and_then(|t| t.path.clone());
+                match target {
+                    Some(path) => {
+                        let path = std::path::PathBuf::from(path);
+                        let result = if verb == "open" {
+                            downloads::open(&path)
+                        } else {
+                            downloads::reveal(&path)
+                        };
+                        if let Err(error) = result {
+                            state.notice = format!("No se pudo abrir: {error}");
+                        }
+                    }
+                    None => state.notice = "Ese archivo ya no está en este equipo".into(),
                 }
             }
             "transfer" | "cancel-transfer" => {
@@ -248,6 +375,65 @@ impl CoreBridge {
             }
             _ => state.toggle(key, value),
         }
+    }
+    /// A phone plugged into (or pulled from) the USB cable. With debugging authorised, TYU
+    /// tunnels straight to it and connects on its own — the phone only has to be paired once,
+    /// over Wi-Fi, because the cable carries no way to prove a new identity.
+    fn cable_event(&mut self, event: usb::UsbEvent, state: &mut AppState) {
+        match event {
+            usb::UsbEvent::Attached(serial) => {
+                // Already linked over Wi-Fi: leave it alone. "Usar cable" is how someone asks
+                // to move a working connection onto the wire.
+                if state
+                    .devices
+                    .nearby
+                    .iter()
+                    .any(|d| d.connection == ConnectionState::Connected)
+                {
+                    state.notice =
+                        "Teléfono en el cable. Pulsa \"Usar cable\" para cambiar de Wi-Fi a USB"
+                            .into();
+                    return;
+                }
+                match usb::Cable::open(&serial) {
+                    Ok(cable) => match cable.peer.parse() {
+                        Ok(id) => {
+                            // An unpaired phone is refused by the core itself, and the error
+                            // reaches the user through the usual event path.
+                            state.notice = "Teléfono en el cable: conectando por USB…".into();
+                            let endpoint = cable.endpoint;
+                            self.cable = Some(cable);
+                            self.send(
+                                state,
+                                TyuCommand::ConnectAt {
+                                    peer: DeviceId(id),
+                                    endpoint,
+                                },
+                            );
+                        }
+                        Err(_) => state.notice = "El teléfono envió una identidad inválida".into(),
+                    },
+                    Err(error) => state.notice = error,
+                }
+            }
+            usb::UsbEvent::Unauthorized(_) => {
+                state.notice =
+                    "Teléfono conectado por cable: acepta la depuración USB en su pantalla".into();
+            }
+            usb::UsbEvent::Detached(_) => {
+                if self.cable.take().is_some() {
+                    state.notice = "Cable desconectado".into();
+                }
+            }
+        }
+    }
+    /// Re-reads what lives outside the app: the saved download folder and which optional
+    /// Windows components are installed. Each component check touches the device stack, so this
+    /// runs on demand (startup, after an install) and never on the frame timer.
+    pub fn refresh_settings(&self, state: &mut AppState) {
+        state.receive_dir = downloads::destination().display().to_string();
+        state.needs_display = !components::Component::Display.present();
+        state.needs_audio = !components::Component::AudioCable.present();
     }
     fn hide_popout(&mut self) {
         self.popout_visible = false;
@@ -303,6 +489,21 @@ impl CoreBridge {
                 break;
             };
             self.event(event, state);
+        }
+        while let Ok(event) = self.usb_events.try_recv() {
+            self.cable_event(event, state);
+        }
+        if let Some(install) = &self.install
+            && let Some(result) = install.finished()
+        {
+            let component = install.component;
+            self.install = None;
+            state.installing.clear();
+            state.notice = match result {
+                Ok(()) => format!("Listo: {} instalado", component.name()),
+                Err(error) => error,
+            };
+            self.refresh_settings(state);
         }
         while let Ok(status) = self.runtime.bypass_status.try_recv() {
             let current = self.bypass_sessions.get(&status.service);
@@ -648,6 +849,7 @@ impl CoreBridge {
                     .iter()
                     .any(|t| t.id == metadata.id.to_string()) =>
             {
+                state.notice = format!("Recibiendo {} del teléfono", metadata.name);
                 state.transfers.items.push(Transfer {
                     id: metadata.id.to_string(),
                     file_name: metadata.name,
@@ -655,6 +857,7 @@ impl CoreBridge {
                     total_bytes: metadata.size,
                     transferred_bytes: 0,
                     status: TransferStatus::InProgress,
+                    path: None,
                 });
             }
             TyuEvent::TransferProgress {
@@ -674,6 +877,7 @@ impl CoreBridge {
                 state.transfer_paused = false;
             }
             TyuEvent::TransferComplete { id, .. } => {
+                let mut message = "Transferencia completada".to_string();
                 if let Some(t) = state
                     .transfers
                     .items
@@ -682,9 +886,25 @@ impl CoreBridge {
                 {
                     t.transferred_bytes = t.total_bytes;
                     t.status = TransferStatus::Completed;
+                    message = match t.direction {
+                        TransferDirection::Send => format!("{} enviado al teléfono", t.file_name),
+                        // The core drops downloads in its own folder; move it where the user
+                        // asked, and remember the final path so the app can open it.
+                        TransferDirection::Receive => match downloads::deliver(&t.file_name) {
+                            Ok(path) => {
+                                let shown = path.display().to_string();
+                                t.path = Some(shown.clone());
+                                format!("{} guardado en {shown}", t.file_name)
+                            }
+                            Err(error) => {
+                                t.status = TransferStatus::Failed("No se pudo guardar".into());
+                                format!("{} llegó pero no se pudo guardar: {error}", t.file_name)
+                            }
+                        },
+                    };
                 }
                 state.transfer_running = false;
-                state.notice = "Archivo recibido o enviado con integridad verificada".into();
+                state.notice = message;
             }
             TyuEvent::TransferPaused { .. } => state.transfer_paused = true,
             TyuEvent::TransferFailed { id, code, .. } => {
