@@ -3,6 +3,7 @@ import { Motion } from "../theme/motion.slint";
 import { Data } from "../data.slint";
 export component TyuButton inherits Rectangle {
     in property <string> label;
+    in property <bool> icon-only: false;
     in property <image> icon;
     in property <bool> has-icon: false;
     in property <bool> enabled: true;
@@ -38,7 +39,7 @@ export component TyuButton inherits Rectangle {
             background: transparent;
             Image { source: root.icon; width: root.icon-size; height: root.icon-size; y: (parent.height - self.height) / 2; image-fit: contain; colorize: root.secondary || root.quiet || root.selected ? (root.selected ? Colors.accent : Colors.text-primary) : Colors.accent-foreground; }
         }
-        Text { text: root.label; font-size: 13px; font-weight: 600; color: root.secondary || root.quiet || root.selected ? (root.selected ? Colors.accent : Colors.text-primary) : Colors.accent-foreground; vertical-alignment: center; }
+        if !root.icon-only: Text { text: root.label; font-size: 13px; font-weight: 600; color: root.secondary || root.quiet || root.selected ? (root.selected ? Colors.accent : Colors.text-primary) : Colors.accent-foreground; vertical-alignment: center; overflow: elide; }
     }
     focus := FocusScope {
         enabled: root.interactive;

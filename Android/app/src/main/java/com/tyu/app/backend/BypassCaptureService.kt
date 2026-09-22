@@ -88,22 +88,22 @@ class BypassCaptureService : Service() {
     @android.annotation.SuppressLint("MissingPermission")
     private fun camera(i: Intent, running: AtomicBoolean) {
         val manager = getSystemService(CameraManager::class.java)
-        val front = i.getStringExtra("lens") == "Frontal"
-        val id = manager.cameraIdList.firstOrNull { manager.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING) ==
-            if (front) CameraCharacteristics.LENS_FACING_FRONT else CameraCharacteristics.LENS_FACING_BACK }
-            ?: error("No se encontró esa cámara")
-        val sizes = manager.getCameraCharacteristics(id).get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)?.getOutputSizes(MediaCodec::class.java)
-        check(sizes?.any { it.width == 1280 && it.height == 720 } == true) { "La cámara no admite 720p" }
-        val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+        val id = i.getStringExtra("cameraId") ?: error("Falta el perfil de cámara negociado")
+        val width = i.getIntExtra("width",0)
+        val height = i.getIntExtra("height",0)
+        val fps = i.getIntExtra("fps",0)
+        check((width == 1920 && height == 1080 || width == 1280 && height == 720) && fps in listOf(30,60)) { "Formato de cámara no válido" }
+        val fpsRange = android.util.Range(i.getIntExtra("fpsLow",fps),i.getIntExtra("fpsHigh",fps))
+        val codec = MediaCodec.createByCodecName(i.getStringExtra("encoder") ?: error("Falta el codificador de cámara"))
         val handlerThread = HandlerThread("tyu-bypass-camera2").apply { start() }
         val handler = Handler(handlerThread.looper)
         var surface: android.view.Surface? = null
         var device: CameraDevice? = null
         var session: CameraCaptureSession? = null
         try {
-            val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC,1280,720).apply {
+            val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC,width,height).apply {
                 setInteger(MediaFormat.KEY_COLOR_FORMAT,MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                setInteger(MediaFormat.KEY_BIT_RATE,4_000_000); setInteger(MediaFormat.KEY_FRAME_RATE,30)
+                setInteger(MediaFormat.KEY_BIT_RATE,i.getIntExtra("bitrate",8_000_000)); setInteger(MediaFormat.KEY_FRAME_RATE,fps)
                 setInteger(MediaFormat.KEY_I_FRAME_INTERVAL,1)
             }
             codec.configure(format,null,null,MediaCodec.CONFIGURE_FLAG_ENCODE)
@@ -125,6 +125,7 @@ class BypassCaptureService : Service() {
                     try {
                         val request = device!!.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
                             addTarget(target); set(CaptureRequest.CONTROL_AF_MODE,CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
+                            set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,fpsRange)
                         }
                         s.setRepeatingRequest(request.build(),null,handler)
                     } catch (e: Exception) { cameraError=e.message }

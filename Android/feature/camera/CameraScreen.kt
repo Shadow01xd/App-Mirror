@@ -23,7 +23,7 @@ fun CameraScreen(computer: String, onStart: () -> Unit, onBack: () -> Unit,
         TyuHeading("Cámara TYU", "Permite utilizar este teléfono como cámara de $computer.")
         TyuCameraPreview()
         TyuOptions("CÁMARA", if (live) listOf("Principal", "Frontal") else listOf("Principal", "Frontal", "Ultra gran angular"), lens, { lens = it; onLens(it) })
-        if (live) TyuFootnote("720p · 30 fps · Wi-Fi local. En el PC selecciona TYU Camera.")
+        if (live) TyuFootnote("Hasta 1080p · 60 fps según la cámara y el codificador del teléfono. Wi-Fi local · TYU Camera en el PC.")
         else TyuOptions("CALIDAD", listOf("Automática", "1080p", "720p"), quality, { quality = it })
     }
 }

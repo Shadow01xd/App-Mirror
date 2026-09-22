@@ -15,6 +15,7 @@ use tiny_http::{Header, Request, Response, Server, StatusCode};
 use tyu_core::*;
 
 type Reply = std::result::Result<StorageReply, TyuErrorCode>;
+type MountResult = (u64, io::Result<String>);
 #[derive(Clone)]
 struct DavLock {
     token: String,
@@ -92,7 +93,9 @@ pub struct StorageBridge {
     workers: Vec<thread::JoinHandle<()>>,
     unc: String,
     namespace: String,
-    mounted: AtomicBool,
+    mounted: Arc<AtomicBool>,
+    registration: Arc<Mutex<u64>>,
+    mount_results: (mpsc::Sender<MountResult>, mpsc::Receiver<MountResult>),
     locks: Locks,
 }
 impl StorageBridge {
@@ -130,18 +133,96 @@ impl StorageBridge {
             stopped,
             workers,
             unc: format!(r"\\127.0.0.1@{port}\DavWWWRoot\{secret}"),
-            namespace: "{F60330CB-9D30-476C-B550-5368C6F78203}".into(),
-            mounted: AtomicBool::new(false),
+            // Explorer caches shell folders by CLSID. Never reuse the previous
+            // process's CLSID with a different random port and bearer path.
+            namespace: format!("{{{}}}", uuid::Uuid::new_v4()),
+            mounted: Arc::new(AtomicBool::new(false)),
+            registration: Arc::new(Mutex::new(0)),
+            mount_results: mpsc::channel(),
             locks,
         })
     }
-    pub fn mount(&self, peer: DeviceId, name: &str) -> io::Result<()> {
+    pub fn mount(&mut self, peer: DeviceId, name: &str) -> io::Result<()> {
+        self.unmount();
         *self.peer.lock().unwrap() = Some(peer);
-        namespace(&self.namespace, Some((&format!("TYU: {name}"), &self.unc)))?;
-        self.mounted.store(true, Ordering::Release);
+        let generation = *self.registration.lock().unwrap();
+        let (broker, registration, mounted, results, id, unc, name) = (
+            self.broker.clone(),
+            self.registration.clone(),
+            self.mounted.clone(),
+            self.mount_results.0.clone(),
+            self.namespace.clone(),
+            self.unc.clone(),
+            name.to_owned(),
+        );
+        self.workers.push(thread::spawn(move || {
+            let result = (|| {
+                let deadline = std::time::Instant::now() + Duration::from_secs(90);
+                loop {
+                    if *registration.lock().unwrap() != generation {
+                        return Ok(None);
+                    }
+                    // ServiceStarted means negotiated, not that Android granted
+                    // file access. Do not publish a folder Windows will cache as denied.
+                    match broker.call(
+                        peer,
+                        StorageOp::ListPage {
+                            path: ".".into(),
+                            offset: 0,
+                        },
+                    ) {
+                        Ok(StorageReply::Entries(_)) => break,
+                        Err(error)
+                            if error.kind() == io::ErrorKind::PermissionDenied
+                                && std::time::Instant::now() < deadline =>
+                        {
+                            thread::sleep(Duration::from_millis(500));
+                        }
+                        Err(error) => return Err(error),
+                        _ => return Err(io::Error::other("Respuesta de almacenamiento no válida")),
+                    }
+                }
+                // Actual WebClient access, exactly as Explorer uses it. A registry
+                // icon alone is never reported as a successful mount.
+                let mut directory = std::fs::read_dir(&unc).map_err(|e| {
+                    io::Error::other(format!(
+                        "Windows no pudo abrir el teléfono mediante WebClient: {e}"
+                    ))
+                })?;
+                if let Some(entry) = directory.next() {
+                    entry?;
+                }
+                let current = registration.lock().unwrap();
+                if *current != generation {
+                    return Ok(None);
+                }
+                namespace(&id, Some((&format!("TYU: {name}"), &unc)))?;
+                mounted.store(true, Ordering::Release);
+                Ok(Some(format!("TYU: {name} disponible en Este equipo")))
+            })();
+            match result {
+                Ok(Some(message)) => {
+                    let _ = results.send((generation, Ok(message)));
+                }
+                Err(error) => {
+                    let _ = results.send((generation, Err(error)));
+                }
+                Ok(None) => {}
+            }
+        }));
         Ok(())
     }
+    pub fn poll_mount(&self) -> Option<io::Result<String>> {
+        while let Ok((generation, result)) = self.mount_results.1.try_recv() {
+            if generation == *self.registration.lock().unwrap() {
+                return Some(result);
+            }
+        }
+        None
+    }
     pub fn unmount(&self) {
+        let mut generation = self.registration.lock().unwrap();
+        *generation += 1;
         *self.peer.lock().unwrap() = None;
         self.locks.lock().unwrap().clear();
         if self.mounted.swap(false, Ordering::AcqRel) {
@@ -184,8 +265,25 @@ $id=$env:TYU_NAMESPACE
 $key='HKCU:\Software\Classes\CLSID\'+$id
 $entry='HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\MyComputer\NameSpace\'+$id
 if ($env:TYU_TARGET) {
+ # Retire only TYU folders whose loopback server is no longer listening. Existing
+ # live instances retain their folders. The fixed CLSID is the previous version.
+ $entries='HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\MyComputer\NameSpace'
+ $ports=@([Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners() | ForEach-Object { $_.Port })
+ foreach ($old in @(Get-ChildItem -LiteralPath $entries -ErrorAction SilentlyContinue)) {
+  $oldId=$old.PSChildName
+  if ($oldId -eq $id -or $oldId -notmatch '^\{[0-9a-fA-F-]{36}\}$') { continue }
+  $oldKey='HKCU:\Software\Classes\CLSID\'+$oldId
+  $owner=Get-ItemProperty -LiteralPath $oldKey -Name 'TYU.Storage' -ErrorAction SilentlyContinue
+  if ($oldId -ne '{F60330CB-9D30-476C-B550-5368C6F78203}' -and $owner.'TYU.Storage' -ne 1) { continue }
+  $bag=Get-ItemProperty -LiteralPath ($oldKey+'\Instance\InitPropertyBag') -ErrorAction SilentlyContinue
+  if ($bag.TargetFolderPath -match '^\\\\127\.0\.0\.1@(\d+)\\DavWWWRoot\\[0-9a-f]{32}$' -and [int]$Matches[1] -notin $ports) {
+   Remove-Item -LiteralPath ($entries+'\'+$oldId) -Recurse -Force
+   Remove-Item -LiteralPath $oldKey -Recurse -Force
+  }
+ }
  New-Item $key -Force | Out-Null
  Set-Item $key $env:TYU_LABEL
+ New-ItemProperty $key 'TYU.Storage' -Value 1 -PropertyType DWord -Force | Out-Null
  New-ItemProperty $key 'System.IsPinnedToNameSpaceTree' -Value 1 -PropertyType DWord -Force | Out-Null
  New-Item ($key+'\InProcServer32') -Force -Value 'shell32.dll' | Out-Null
  New-Item ($key+'\DefaultIcon') -Force -Value 'imageres.dll,-2' | Out-Null
@@ -211,6 +309,15 @@ if ($env:TYU_TARGET) {
         .creation_flags(0x08000000)
         .output()?;
     if result.status.success() {
+        // Notify Explorer after adding/removing the shell namespace.
+        unsafe {
+            windows::Win32::UI::Shell::SHChangeNotify(
+                windows::Win32::UI::Shell::SHCNE_ASSOCCHANGED,
+                windows::Win32::UI::Shell::SHCNF_IDLIST,
+                None,
+                None,
+            );
+        }
         Ok(())
     } else {
         Err(io::Error::other(
@@ -698,7 +805,7 @@ mod tests {
             .unwrap();
         next(&mut pc, |e| matches!(e, TyuEvent::Connected { .. })).await;
         next(&mut phone, |e| matches!(e, TyuEvent::Connected { .. })).await;
-        let bridge = StorageBridge::start(pc.commands.clone()).unwrap();
+        let mut bridge = StorageBridge::start(pc.commands.clone()).unwrap();
         *bridge.peer.lock().unwrap() = Some(phone.device.id);
         let broker = bridge.broker.clone();
         let worker = tokio::spawn(async move {
@@ -706,12 +813,49 @@ mod tests {
                 broker.deliver(&e);
             }
         });
+        if std::env::var_os("TYU_TEST_WEBCLIENT").is_some() {
+            shared.set_root(None, 0).unwrap();
+            bridge
+                .mount(phone.device.id, "TYU Storage Regression")
+                .unwrap();
+            tokio::time::sleep(Duration::from_millis(700)).await;
+            assert!(
+                !bridge.is_mounted(),
+                "Do not publish before Android permission"
+            );
+            assert!(bridge.poll_mount().is_none());
+            shared.set_root(Some(root.path()), 8 * 1024 * 1024).unwrap();
+            let deadline = std::time::Instant::now() + Duration::from_secs(15);
+            loop {
+                if let Some(result) = bridge.poll_mount() {
+                    result.unwrap();
+                    break;
+                }
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "Mount did not become ready"
+                );
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+            assert!(bridge.is_mounted());
+        }
         let unc = bridge.unc.clone();
         let shared2 = shared.clone();
         tokio::task::spawn_blocking(move || {
             let port=unc.split('@').nth(1).unwrap().split('\\').next().unwrap();
             let token=unc.rsplit('\\').next().unwrap();
             let address=format!("127.0.0.1:{port}"); let base=format!("/{token}");
+            if std::env::var_os("TYU_TEST_WEBCLIENT").is_some() {
+                // Exercise the same Windows redirector as Explorer, not just HTTP.
+                let folder = std::path::Path::new(&unc).join("DCIM");
+                let entries = std::fs::read_dir(&folder).expect("Explorer/WebClient must open the phone").collect::<io::Result<Vec<_>>>().unwrap();
+                assert!(!entries.is_empty());
+                assert_eq!(std::fs::read(folder.join("foto.txt")).unwrap(), b"phone original");
+                std::fs::write(folder.join("windows.txt"), b"written from Windows").unwrap();
+                std::fs::rename(folder.join("windows.txt"), folder.join("renamed.txt")).unwrap();
+                assert_eq!(std::fs::read(folder.join("renamed.txt")).unwrap(), b"written from Windows");
+                std::fs::remove_file(folder.join("renamed.txt")).unwrap();
+            }
             let http=|method:&str,path:&str,headers:&str,body:&str| {
                 let mut tcp=std::net::TcpStream::connect(&address).unwrap(); tcp.set_read_timeout(Some(Duration::from_secs(25))).unwrap();
                 write!(tcp,"{method} {base}/{path} HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\nContent-Length: {}\r\n{headers}\r\n{body}",body.len()).unwrap();

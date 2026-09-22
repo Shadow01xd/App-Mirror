@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import org.json.JSONObject
 
-data class BypassService(val session: String, val stream: String? = null)
+data class BypassService(val session: String, val stream: String? = null, val cameraProfile: BypassCameraProfile? = null)
 data class BypassFile(val id: String, val name: String, val bytes: Long = 0, val total: Long = 0,
     val status: String = "Preparando", val path: String? = null, val incoming: Boolean = false,
     /** Where a received file was saved, so the app can open it. */
@@ -49,7 +49,14 @@ class BypassController(private val app: Application, private val scope: Coroutin
     }
     fun media(service: String) {
         val session = state.value.services[service]?.session ?: return
-        command("bypass-media", JSONObject().put("session", session).put("service", service))
+        val data = JSONObject().put("session", session).put("service", service)
+        if (service == "Camera") {
+            val profile = try { BypassCameraProfile.select(app, state.value.lens) }
+                catch (e: Exception) { error(e.message ?: "No se pudo preparar la cámara"); stop(service); return }
+            mutable.update { old -> old.copy(services = old.services + (service to old.services.getValue(service).copy(cameraProfile = profile))) }
+            data.put("width", profile.width).put("height", profile.height).put("fps", profile.fps).put("bitrate", profile.bitrate)
+        }
+        command("bypass-media", data)
     }
     fun setStorage(enabled: Boolean) {
         @Suppress("DEPRECATION")

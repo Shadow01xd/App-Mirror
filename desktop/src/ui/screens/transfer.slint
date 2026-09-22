@@ -5,28 +5,30 @@ import { TyuProgress } from "../components/tyu-progress.slint";
 
 export component TransferScreen inherits Rectangle {
     background: transparent;
+    private property <bool> narrow: root.width < 690px;
     VerticalLayout { alignment: start; spacing: 20px;
         Text { text: "Transferencias"; font-size: 28px; font-weight: 600; color: Colors.text-primary; }
-        Text { text: "Entre este equipo y " + Data.device-name + " · por tu red local, sin Internet"; font-size: 13px; color: Colors.text-secondary; }
+        Text { text: "Entre este equipo y " + Data.device-name + " · por tu red local, sin Internet"; wrap: word-wrap; font-size: 13px; color: Colors.text-secondary; }
 
         // Where downloads land. Shown first because it is what people look for.
-        Rectangle { height: 96px; border-width: 1px; border-color: Colors.border; border-radius: 12px; background: Colors.surface;
-            VerticalLayout { padding: 14px; spacing: 10px;
+        Rectangle { height: destination.preferred-height; border-width: 1px; border-color: Colors.border; border-radius: 12px; background: Colors.surface;
+            destination := VerticalLayout { padding: 14px; spacing: 10px;
                 HorizontalLayout { spacing: 8px; alignment: start;
                     Text { text: "Lo que recibas se guarda en"; font-size: 12px; color: Colors.text-secondary; vertical-alignment: center; }
                     Text { text: Data.receive-dir; font-size: 12px; font-weight: 600; color: Colors.accent; overflow: elide; vertical-alignment: center; }
                 }
-                HorizontalLayout { height: 34px; spacing: 8px;
-                    TyuButton { label: "Descargas"; secondary: true; width: 118px; clicked => { Data.action("dest-downloads"); } }
-                    TyuButton { label: "Documentos"; secondary: true; width: 126px; clicked => { Data.action("dest-documents"); } }
-                    TyuButton { label: "Otra carpeta…"; secondary: true; width: 138px; clicked => { Data.action("dest-choose"); } }
-                    TyuButton { label: "Abrir carpeta"; secondary: true; width: 132px; clicked => { Data.action("open-destination"); } }
+                GridLayout { spacing: 8px;
+                    TyuButton { row: root.narrow ? 0 : 0; col: root.narrow ? 0 : 0; label: "Descargas"; secondary: true; width: 118px; clicked => { Data.action("dest-downloads"); } }
+                    TyuButton { row: root.narrow ? 0 : 0; col: root.narrow ? 1 : 1; label: "Documentos"; secondary: true; width: 126px; clicked => { Data.action("dest-documents"); } }
+                    TyuButton { row: root.narrow ? 1 : 0; col: root.narrow ? 0 : 2; label: "Otra carpeta…"; secondary: true; width: 138px; clicked => { Data.action("dest-choose"); } }
+                    TyuButton { row: root.narrow ? 1 : 0; col: root.narrow ? 1 : 3; label: "Abrir carpeta"; secondary: true; width: 132px; clicked => { Data.action("open-destination"); } }
                 }
             }
         }
 
-        HorizontalLayout { height: 42px; spacing: 12px;
+        GridLayout { spacing: 12px;
             TyuButton {
+                row: 0; col: 0; colspan: root.narrow ? 3 : 1;
                 label: "Enviar archivos al teléfono";
                 has-icon: true;
                 icon: @image-url("../../../assets/icons/send.svg");
@@ -34,9 +36,9 @@ export component TransferScreen inherits Rectangle {
                 enabled: Data.connected;
                 clicked => { Data.action("add-files"); }
             }
-            TyuButton { label: Data.transfer-paused ? "Reanudar" : "Pausar"; secondary: true; width: 120px; enabled: Data.connected && Data.transfer-running; clicked => { Data.action("transfer"); } }
-            TyuButton { label: "Cancelar"; secondary: true; width: 120px; enabled: Data.transfer-running; clicked => { Data.action("cancel-transfer"); } }
-            TyuButton { label: "Limpiar"; secondary: true; width: 110px; enabled: Data.files.length > 0; clicked => { Data.action("clear-transfers"); } }
+            TyuButton { row: root.narrow ? 1 : 0; col: root.narrow ? 0 : 1; label: Data.transfer-paused ? "Reanudar" : "Pausar"; secondary: true; width: 120px; enabled: Data.connected && Data.transfer-running; clicked => { Data.action("transfer"); } }
+            TyuButton { row: root.narrow ? 1 : 0; col: root.narrow ? 1 : 2; label: "Cancelar"; secondary: true; width: 120px; enabled: Data.transfer-running; clicked => { Data.action("cancel-transfer"); } }
+            TyuButton { row: root.narrow ? 1 : 0; col: root.narrow ? 2 : 3; label: "Limpiar"; secondary: true; width: 110px; enabled: Data.files.length > 0; clicked => { Data.action("clear-transfers"); } }
         }
         if !Data.connected: Text { text: "Conecta un dispositivo para enviar archivos."; font-size: 13px; color: Colors.warning; }
 

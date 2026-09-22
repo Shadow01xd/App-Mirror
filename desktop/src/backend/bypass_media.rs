@@ -17,8 +17,12 @@ pub struct Status {
 struct Sink {
     peer: DeviceId,
     service: ServiceKind,
-    sender: mpsc::SyncSender<bytes::Bytes>,
+    sender: mpsc::SyncSender<MediaInput>,
     last_keyframe: Option<std::time::Instant>,
+}
+enum MediaInput {
+    Format(VideoFormat),
+    Frame(bytes::Bytes),
 }
 pub struct Receivers {
     sinks: HashMap<SessionId, Sink>,
@@ -56,7 +60,7 @@ impl Receivers {
                         .try_send(TyuCommand::StopService { peer, session });
                     return true;
                 }
-                let (sender, rx) = mpsc::sync_channel::<bytes::Bytes>(8);
+                let (sender, rx) = mpsc::sync_channel::<MediaInput>(8);
                 self.sinks.insert(
                     session,
                     Sink {
@@ -72,17 +76,30 @@ impl Receivers {
                     let result: std::result::Result<(), String> = if service == ServiceKind::Camera
                     {
                         (|| {
-                            let mut camera =
-                                super::bypass_camera::Camera::new().map_err(|e| e.to_string())?;
+                            let Ok(MediaInput::Format(format)) = rx.recv() else {
+                                return Ok(());
+                            };
+                            let mut camera = super::bypass_camera::Camera::with_format(
+                                format.width,
+                                format.height,
+                                format.fps,
+                            )
+                            .map_err(|e| e.to_string())?;
                             let mut ready = false;
-                            while let Ok(frame) = rx.recv() {
+                            while let Ok(input) = rx.recv() {
+                                let MediaInput::Frame(frame) = input else {
+                                    continue;
+                                };
                                 if camera.push(&frame).map_err(|e| e.to_string())? && !ready {
                                     ready = true;
                                     let _ = status.send(Status {
                                         session,
                                         service,
                                         active: true,
-                                        message: "Cámara lista: en tus apps elige «TYU Camera (Windows Virtual Camera)»".into(),
+                                        message: format!(
+                                            "TYU Camera disponible · {} × {} · {} fps solicitados",
+                                            format.width, format.height, format.fps
+                                        ),
                                     });
                                 }
                             }
@@ -102,6 +119,18 @@ impl Receivers {
                     }
                 });
             }
+            TyuEvent::MediaStarted {
+                session,
+                format: MediaMetadata::Video(format),
+                ..
+            } => {
+                if let Some(sink) = self.sinks.get(session)
+                    && sink.service == ServiceKind::Camera
+                {
+                    let _ = sink.sender.try_send(MediaInput::Format(format.clone()));
+                    return true;
+                }
+            }
             TyuEvent::MediaFrame {
                 session,
                 stream,
@@ -110,7 +139,7 @@ impl Receivers {
             } => {
                 if let Some(sink) = self.sinks.get_mut(session) {
                     if matches!(
-                        sink.sender.try_send(data.clone()),
+                        sink.sender.try_send(MediaInput::Frame(data.clone())),
                         Err(mpsc::TrySendError::Full(_))
                     ) && sink.service == ServiceKind::Camera
                         && sink
@@ -151,12 +180,15 @@ impl Receivers {
 }
 fn microphone(
     session: SessionId,
-    rx: mpsc::Receiver<bytes::Bytes>,
+    rx: mpsc::Receiver<MediaInput>,
     status: &mpsc::Sender<Status>,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
     let microphone = super::bypass_microphone::Microphone::new()?;
     let mut ready = false;
-    while let Ok(bytes) = rx.recv() {
+    while let Ok(input) = rx.recv() {
+        let MediaInput::Frame(bytes) = input else {
+            continue;
+        };
         microphone.push(&bytes)?;
         if !ready {
             ready = true;
@@ -183,7 +215,9 @@ mod tests {
         let session = SessionId::new();
         let stream = StreamId::new();
         let (sender, _frames) = mpsc::sync_channel(1);
-        sender.send(bytes::Bytes::from_static(b"queued")).unwrap();
+        sender
+            .send(MediaInput::Frame(bytes::Bytes::from_static(b"queued")))
+            .unwrap();
         receivers.owned.push_back(session);
         receivers.sinks.insert(
             session,

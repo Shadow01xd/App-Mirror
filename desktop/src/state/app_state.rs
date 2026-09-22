@@ -20,6 +20,7 @@ pub struct AppState {
     pub camera: bool,
     pub microphone: bool,
     pub storage: bool,
+    pub storage_pending: bool,
     pub noise_reduction: bool,
     pub reduced_motion: bool,
     pub notifications: bool,
@@ -38,7 +39,8 @@ pub struct AppState {
     pub installing: String,
     pub elapsed_ticks: u64,
     pub scan_ticks: u32,
-    notice_ticks: u32,
+    notice_seen: String,
+    notice_deadline: Option<std::time::Instant>,
 }
 
 impl AppState {
@@ -102,7 +104,7 @@ impl AppState {
 
     fn report(&mut self, message: &str) {
         self.notice = message.into();
-        self.notice_ticks = 40;
+        self.notice_seen.clear();
     }
 
     fn record(&mut self, message: &str) {
@@ -124,6 +126,7 @@ impl AppState {
     }
 
     pub fn disconnect(&mut self) {
+        self.storage_pending = false;
         self.mode.active = false;
         self.elapsed_ticks = 0;
         self.camera = false;
@@ -311,10 +314,6 @@ impl AppState {
     /// One 100ms demo clock step. All timers run on the UI thread.
     pub fn tick(&mut self) {
         self.scan_ticks = self.scan_ticks.saturating_sub(1);
-        self.notice_ticks = self.notice_ticks.saturating_sub(1);
-        if self.notice_ticks == 0 {
-            self.notice.clear();
-        }
         if self.mode.active {
             self.elapsed_ticks += 1;
         }
@@ -345,7 +344,57 @@ impl AppState {
         }
     }
 
+    /// Real time, independent of frame rate, and shared by native and demo notices.
+    pub fn update_notice(&mut self, now: std::time::Instant) {
+        if self.notice != self.notice_seen {
+            self.notice_seen.clone_from(&self.notice);
+            self.notice_deadline =
+                (!self.notice.is_empty()).then(|| now + std::time::Duration::from_secs(15));
+        }
+        if self.notice_deadline.is_some_and(|deadline| now >= deadline) {
+            self.dismiss_notice();
+        }
+    }
+
+    pub fn dismiss_notice(&mut self) {
+        self.notice.clear();
+        self.notice_seen.clear();
+        self.notice_deadline = None;
+    }
+
     pub fn device_rows(&self) -> Vec<Device> {
         self.devices.nearby.clone()
+    }
+}
+
+#[cfg(test)]
+mod notice_tests {
+    use super::AppState;
+    use std::time::{Duration, Instant};
+    #[test]
+    fn notices_expire_after_fifteen_seconds_and_new_messages_restart_deadline() {
+        let mut state = AppState::desktop();
+        let now = Instant::now();
+        state.notice = "first".into();
+        state.update_notice(now);
+        state.update_notice(now + Duration::from_secs(14));
+        assert_eq!(state.notice, "first");
+        state.notice = "second".into();
+        state.update_notice(now + Duration::from_secs(14));
+        state.update_notice(now + Duration::from_secs(15));
+        assert_eq!(state.notice, "second");
+        state.update_notice(now + Duration::from_secs(29));
+        assert!(state.notice.is_empty());
+        state.notice = "second".into();
+        state.update_notice(now + Duration::from_secs(30));
+        state.dismiss_notice();
+        state.update_notice(now + Duration::from_secs(31));
+        assert!(state.notice.is_empty());
+        state.notice = "third".into();
+        state.update_notice(now + Duration::from_secs(32));
+        state.update_notice(now + Duration::from_secs(46));
+        assert_eq!(state.notice, "third");
+        state.update_notice(now + Duration::from_secs(47));
+        assert!(state.notice.is_empty());
     }
 }

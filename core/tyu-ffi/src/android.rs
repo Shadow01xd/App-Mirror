@@ -233,10 +233,26 @@ pub extern "system" fn Java_com_tyu_app_backend_NativeCore_command(
                             })
                         } else {
                             MediaMetadata::Video(VideoFormat {
-                                width: 1280,
-                                height: 720,
-                                fps: 30,
-                                bitrate: 4_000_000,
+                                width: v["width"]
+                                    .as_u64()
+                                    .filter(|n| matches!(*n, 1280 | 1920))
+                                    .ok_or("Invalid Bypass width")?
+                                    as u32,
+                                height: v["height"]
+                                    .as_u64()
+                                    .filter(|n| matches!(*n, 720 | 1080))
+                                    .ok_or("Invalid Bypass height")?
+                                    as u32,
+                                fps: v["fps"]
+                                    .as_u64()
+                                    .filter(|n| matches!(*n, 30 | 60))
+                                    .ok_or("Invalid Bypass fps")?
+                                    as u16,
+                                bitrate: v["bitrate"]
+                                    .as_u64()
+                                    .filter(|n| *n > 0 && *n <= 20_000_000)
+                                    .ok_or("Invalid Bypass bitrate")?
+                                    as u32,
                                 codec: VideoCodec::H264,
                                 orientation: Orientation::Landscape,
                             })

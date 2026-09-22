@@ -10,9 +10,19 @@ pub struct Camera {
     host: Child,
     input: Option<ChildStdin>,
     decoder: openh264::decoder::Decoder,
+    width: usize,
+    height: usize,
+    frame: Vec<u8>,
 }
 impl Camera {
+    #[cfg(test)]
     pub fn new() -> io::Result<Self> {
+        Self::with_format(1280, 720, 30)
+    }
+    pub fn with_format(width: u32, height: u32, fps: u16) -> io::Result<Self> {
+        if !matches!((width, height), (1280, 720) | (1920, 1080)) || !matches!(fps, 30 | 60) {
+            return Err(io::Error::other("Formato de cámara TYU no admitido"));
+        }
         let bundled = std::env::current_exe()?
             .parent()
             .unwrap()
@@ -27,6 +37,12 @@ impl Camera {
             ));
         }
         let mut host = Command::new(executable)
+            .args([
+                "--format",
+                &width.to_string(),
+                &height.to_string(),
+                &fps.to_string(),
+            ])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -62,24 +78,30 @@ impl Camera {
             host,
             input,
             decoder,
+            width: width as usize,
+            height: height as usize,
+            frame: vec![0; width as usize * height as usize * 3 / 2],
         })
     }
     pub fn push(&mut self, data: &[u8]) -> io::Result<bool> {
         let Some(picture) = self.decoder.decode(data).map_err(io::Error::other)? else {
             return Ok(false);
         };
-        if picture.dimensions() != (1280, 720) {
-            return Err(io::Error::other("TYU Camera requiere video 1280 x 720"));
+        let (width, height) = (self.width, self.height);
+        if picture.dimensions() != (width, height) {
+            return Err(io::Error::other(
+                "La resolución recibida no coincide con la cámara negociada",
+            ));
         }
-        let mut frame = vec![0; 1280 * 720 * 3 / 2];
+        let frame = &mut self.frame;
         let (ys, us, vs) = picture.strides();
-        for row in 0..720 {
-            frame[row * 1280..(row + 1) * 1280]
-                .copy_from_slice(&picture.y()[row * ys..row * ys + 1280]);
+        for row in 0..height {
+            frame[row * width..(row + 1) * width]
+                .copy_from_slice(&picture.y()[row * ys..row * ys + width]);
         }
-        for row in 0..360 {
-            for col in 0..640 {
-                let target = 1280 * 720 + row * 1280 + col * 2;
+        for row in 0..height / 2 {
+            for col in 0..width / 2 {
+                let target = width * height + row * width + col * 2;
                 frame[target] = picture.u()[row * us + col];
                 frame[target + 1] = picture.v()[row * vs + col];
             }
@@ -89,7 +111,7 @@ impl Camera {
             .as_mut()
             .ok_or_else(|| io::Error::other("Cámara detenida"))?;
         input.write_all(&(frame.len() as u32).to_le_bytes())?;
-        input.write_all(&frame)?;
+        input.write_all(frame)?;
         Ok(true)
     }
 }

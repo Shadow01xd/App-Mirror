@@ -132,20 +132,18 @@ impl CoreBridge {
                 state.pending_name.clear();
             }
             "discover" => self.send(state, TyuCommand::StartDiscovery),
-            "install-display" | "install-audio" => {
-                if self.install.is_none() {
-                    let component = if command == "install-display" {
-                        components::Component::Display
-                    } else {
-                        components::Component::AudioCable
-                    };
-                    state.installing = component.name().into();
-                    state.notice = format!(
-                        "Descargando el {} del fabricante; confirma el aviso de Windows",
-                        component.name()
-                    );
-                    self.install = Some(components::install(component));
-                }
+            "install-display" | "install-audio" if self.install.is_none() => {
+                let component = if command == "install-display" {
+                    components::Component::Display
+                } else {
+                    components::Component::AudioCable
+                };
+                state.installing = component.name().into();
+                state.notice = format!(
+                    "Descargando el {} del fabricante; confirma el aviso de Windows",
+                    component.name()
+                );
+                self.install = Some(components::install(component));
             }
             "connect" | "confirm-pair" => {
                 if let Some(peer) = self.selected(state) {
@@ -493,6 +491,22 @@ impl CoreBridge {
         while let Ok(event) = self.usb_events.try_recv() {
             self.cable_event(event, state);
         }
+        if let Some(result) = self.runtime.storage.poll_mount() {
+            state.storage_pending = false;
+            state.storage = result.is_ok();
+            state.notice = match result {
+                Ok(message) => message,
+                Err(error) => format!(
+                    "No se pudo abrir el almacenamiento: {error}. Revisa el permiso de archivos en Android y vuelve a activarlo."
+                ),
+            };
+            if !state.storage
+                && let Some(session) = self.bypass_sessions.get(&ServiceKind::Storage).copied()
+                && let Some(peer) = self.selected(state)
+            {
+                self.send(state, TyuCommand::StopService { peer, session });
+            }
+        }
         if let Some(install) = &self.install
             && let Some(result) = install.finished()
         {
@@ -615,10 +629,9 @@ impl CoreBridge {
                         .unwrap_or("Android");
                     match self.runtime.storage.mount(*peer, name) {
                         Ok(()) => {
-                            state.storage = true;
-                            state.notice = format!(
-                                "TYU: {name} disponible en Este equipo. Confirma el permiso de archivos en el teléfono"
-                            );
+                            state.storage = false;
+                            state.storage_pending = true;
+                            state.notice = "Confirma el permiso de archivos en Android. Preparando el acceso al teléfono…".into();
                         }
                         Err(e) => state.notice = format!("No se pudo montar el teléfono: {e}"),
                     }
@@ -640,6 +653,7 @@ impl CoreBridge {
                         ServiceKind::Microphone => state.microphone = false,
                         ServiceKind::Storage => {
                             state.storage = false;
+                            state.storage_pending = false;
                             self.runtime.storage.unmount();
                         }
                         _ => {}
@@ -790,6 +804,7 @@ impl CoreBridge {
                 peer,
                 session,
                 stream,
+                ..
             } if self.active_mode == Some(tyu_core::TyuMode::Monitor)
                 && Some(session) == self.mode_session =>
             {

@@ -69,6 +69,11 @@ fun BypassEffects(backend: ConnectionViewModel) {
                     putExtra("kind",kind); putExtra("handle",backend.nativeHandle); putExtra("peer",peer)
                     putExtra("session",service.session); putExtra("stream",stream)
                     putExtra("lens",state.lens); putExtra("noise",state.noise)
+                    service.cameraProfile?.let { profile ->
+                        putExtra("cameraId",profile.cameraId); putExtra("width",profile.width); putExtra("height",profile.height)
+                        putExtra("fps",profile.fps); putExtra("fpsLow",profile.fpsRange.lower); putExtra("fpsHigh",profile.fpsRange.upper)
+                        putExtra("encoder",profile.encoder); putExtra("bitrate",profile.bitrate)
+                    }
                 })
             } catch (e: Exception) { backend.bypass.error(e.message ?: "No se pudo activar el servicio"); backend.bypass.stop(kind) }
         } }

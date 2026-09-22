@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.os.Environment
 import android.provider.MediaStore
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
@@ -23,7 +24,12 @@ class BypassIntegrationTest {
         val uri=InstrumentationRegistry.getArguments().getString("tyuPairingUri")
         org.junit.Assume.assumeTrue("Requires the explicit local bypass_probe host",uri != null && android.os.Build.VERSION.SDK_INT >= 29)
         lateinit var backend: ConnectionViewModel
-        compose.activityRule.scenario.onActivity { backend=ViewModelProvider(it)[ConnectionViewModel::class.java] }
+        compose.activityRule.scenario.onActivity {
+            backend=ViewModelProvider(
+                it.application as ViewModelStoreOwner,
+                ViewModelProvider.AndroidViewModelFactory.getInstance(it.application),
+            )[ConnectionViewModel::class.java]
+        }
         compose.waitUntil(15000) {backend.state.value.ready}
         backend.pair(requireNotNull(uri))
         compose.waitUntil(30000) {backend.state.value.connected != null}

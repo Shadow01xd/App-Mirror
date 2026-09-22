@@ -8,7 +8,8 @@ import { TyuButton } from "tyu-button.slint";
 export component TyuModal inherits Rectangle {
     private property <float> enter: 0;
     private property <bool> animate-enter: false;
-    init => { entrance-timer.start(); }
+    init => { entrance-timer.start(); dismiss-timer.start(); }
+    dismiss-timer := Timer { interval: 15s; triggered => { self.stop(); Data.action("reject-pair"); } }
     entrance-timer := Timer { interval: 16ms; triggered => { root.animate-enter = true; root.enter = 1; self.stop(); } }
     animate enter { duration: root.animate-enter ? Motion.standard : 0ms; easing: cubic-bezier(0.2, 0, 0, 1); }
     background: #000000b3;
@@ -18,12 +19,12 @@ export component TyuModal inherits Rectangle {
         init => { self.focus(); }
         key-pressed(e) => { if e.text == Key.Escape { Data.action("reject-pair"); return accept; } reject }
         Rectangle {
-            width: min(460px, parent.width - 60px); height: 268px;
+            width: min(460px, parent.width - 40px); height: modal-content.preferred-height;
             x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
             background: Colors.surface; border-radius: Shapes.modal-radius; border-width: Shapes.border-width; border-color: Colors.border;
             transform-scale-x: 0.96 + root.enter * 0.04;
             transform-scale-y: 0.96 + root.enter * 0.04;
-            VerticalLayout {
+            modal-content := VerticalLayout {
                 padding: Spacing.xl; spacing: Spacing.lg; alignment: start;
                 HorizontalLayout {
                     spacing: Spacing.md;
@@ -31,7 +32,8 @@ export component TyuModal inherits Rectangle {
                         width: 44px; height: 44px; border-radius: 22px; background: Colors.primary-surface;
                         Image { width: 22px; height: 22px; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; source: @image-url("../../../assets/icons/phone.svg"); colorize: Colors.accent; }
                     }
-                    Text { text: "Solicitud de conexión"; font-size: Typography.title-size; font-weight: 600; color: Colors.text-primary; vertical-alignment: center; }
+                    Text { text: "Solicitud de conexión"; font-size: Typography.title-size; font-weight: 600; color: Colors.text-primary; vertical-alignment: center; wrap: word-wrap; horizontal-stretch: 1; }
+                    TyuButton { label: ""; accessible-label: "Cerrar solicitud"; in-dialog: true; has-icon: true; icon: @image-url("../../../assets/icons/close.svg"); quiet: true; width: 40px; clicked => { Data.action("reject-pair"); } }
                 }
                 Text { text: Data.pending-name + " se quiere conectar a este equipo."; color: Colors.text-primary; font-size: Typography.heading-size; wrap: word-wrap; }
                 Text { text: "Acepta solo si reconoces este teléfono."; color: Colors.text-secondary; font-size: Typography.body-size; wrap: word-wrap; }

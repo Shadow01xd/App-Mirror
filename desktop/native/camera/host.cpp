@@ -7,9 +7,10 @@
 
 struct FrameStore {
     std::mutex lock;
+    CameraFormat format;
     std::vector<BYTE> frame;
     std::atomic<bool> running{true};
-    FrameStore():frame(FRAME_BYTES,128) {std::fill(frame.begin(),frame.begin()+WIDTH*HEIGHT,16);}
+    explicit FrameStore(CameraFormat selected):format(selected),frame(format.bytes(),128) {std::fill(frame.begin(),frame.begin()+format.width*format.height,16);}
 };
 static std::wstring PipeSecurity() {
     HANDLE token=nullptr;
@@ -27,7 +28,7 @@ static void Serve(const std::wstring& name,std::shared_ptr<FrameStore> frames) {
     SECURITY_ATTRIBUTES security{sizeof(security),descriptor,FALSE};
     std::atomic<int> clients{0};
     while(frames->running) {
-        HANDLE pipe=CreateNamedPipeW(name.c_str(),PIPE_ACCESS_DUPLEX|FILE_FLAG_OVERLAPPED,PIPE_TYPE_BYTE|PIPE_READMODE_BYTE|PIPE_WAIT|PIPE_REJECT_REMOTE_CLIENTS,8,FRAME_BYTES,64,1000,&security);
+        HANDLE pipe=CreateNamedPipeW(name.c_str(),PIPE_ACCESS_DUPLEX|FILE_FLAG_OVERLAPPED,PIPE_TYPE_BYTE|PIPE_READMODE_BYTE|PIPE_WAIT|PIPE_REJECT_REMOTE_CLIENTS,8,frames->format.bytes(),64,1000,&security);
         if(pipe==INVALID_HANDLE_VALUE)break;
         OVERLAPPED ov{};ov.hEvent=CreateEventW(nullptr,TRUE,FALSE,nullptr);
         bool connected=ConnectNamedPipe(pipe,&ov)!=FALSE;
@@ -42,11 +43,11 @@ static void Serve(const std::wstring& name,std::shared_ptr<FrameStore> frames) {
         if(!connected) {CloseHandle(pipe);continue;}
         // Each client only reads the most recent frame; no unbounded camera queues.
         std::thread([pipe,frames] {
-            std::vector<BYTE> snapshot(FRAME_BYTES);
+            std::vector<BYTE> snapshot(frames->format.bytes());
             while(frames->running) {
                 BYTE request=0;if(!PipeIO(pipe,&request,1,false)||request!=1)break;
                 {std::lock_guard guard(frames->lock);snapshot=frames->frame;}
-                DWORD size=FRAME_BYTES;
+                DWORD size=frames->format.bytes();
                 if(!PipeIO(pipe,&size,4,true)||!PipeIO(pipe,snapshot.data(),size,true))break;
             }
             DisconnectNamedPipe(pipe);CloseHandle(pipe);
@@ -62,14 +63,17 @@ static HRESULT SelfTest(const std::wstring& pipe,std::shared_ptr<FrameStore> fra
     ComPtr<IClassFactory> creator;HR(factory(TYU_CAMERA_CLSID,IID_PPV_ARGS(&creator)));
     ComPtr<IMFActivate> activation;HR(creator->CreateInstance(nullptr,IID_PPV_ARGS(&activation)));
     HR(activation->SetString(TYU_CAMERA_PIPE,pipe.c_str()));
+    HR(frames->format.Store(activation.Get()));
     ComPtr<IMFMediaSource> source;HR(activation->ActivateObject(IID_PPV_ARGS(&source)));
     {
         std::lock_guard guard(frames->lock);
-        std::fill(frames->frame.begin(),frames->frame.begin()+WIDTH*HEIGHT,81);
-        for(UINT32 i=WIDTH*HEIGHT;i<FRAME_BYTES;i+=2){frames->frame[i]=90;frames->frame[i+1]=240;}
+        std::fill(frames->frame.begin(),frames->frame.begin()+frames->format.width*frames->format.height,81);
+        for(UINT32 i=frames->format.width*frames->format.height;i<frames->format.bytes();i+=2){frames->frame[i]=90;frames->frame[i+1]=240;}
     }
     ComPtr<IMFSourceReader> reader;HR(MFCreateSourceReaderFromMediaSource(source.Get(),nullptr,&reader));
     ComPtr<IMFMediaType> type;HR(reader->GetNativeMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM,0,&type));
+    CameraFormat actual;HR(actual.Load(type.Get()));
+    if(actual.width!=frames->format.width||actual.height!=frames->format.height||actual.fps!=frames->format.fps)return E_UNEXPECTED;
     HR(reader->SetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM,nullptr,type.Get()));
     int pictures=0;
     for(int n=0;n<70;n++) {
@@ -77,22 +81,24 @@ static HRESULT SelfTest(const std::wstring& pipe,std::shared_ptr<FrameStore> fra
         DWORD flags=0;LONGLONG time=0;ComPtr<IMFSample> sample;
         HR(reader->ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM,0,nullptr,&flags,&time,&sample));
         if(sample) {
+            LONGLONG duration=0;HR(sample->GetSampleDuration(&duration));
+            if(duration!=frames->format.duration())return E_UNEXPECTED;
             ComPtr<IMFMediaBuffer> buffer;HR(sample->ConvertToContiguousBuffer(&buffer));
             BYTE* pixels=nullptr;DWORD length=0;HR(buffer->Lock(&pixels,nullptr,&length));
-            bool valid=length>=FRAME_BYTES&&pixels[0]==81&&pixels[WIDTH*HEIGHT]==90&&pixels[WIDTH*HEIGHT+1]==240;
+            bool valid=length>=frames->format.bytes()&&pixels[0]==81&&pixels[frames->format.width*frames->format.height]==90&&pixels[frames->format.width*frames->format.height+1]==240;
             buffer->Unlock();if(!valid)return E_UNEXPECTED;
             pictures++;
         }
     }
     source->Shutdown();reader.Reset();activation->ShutdownObject();
-    std::cout<<"SELF_TEST frames="<<pictures<<std::endl;
+    std::cout<<"SELF_TEST frames="<<pictures<<" format="<<actual.width<<"x"<<actual.height<<"@"<<actual.fps<<std::endl;
     return pictures>=65?S_OK:E_FAIL;
 }
-static HRESULT Run(bool test) {
+static HRESULT Run(bool test, CameraFormat format) {
     HR(CoInitializeEx(nullptr,COINIT_MULTITHREADED));HR(MFStartup(MF_VERSION));
     GUID id{};HR(CoCreateGuid(&id));WCHAR text[40]{};StringFromGUID2(id,text,40);
     std::wstring pipe=L"\\\\.\\pipe\\TYU-Camera-";pipe+=text;
-    auto frames=std::make_shared<FrameStore>();
+    auto frames=std::make_shared<FrameStore>(format);
     std::thread server(Serve,pipe,frames);
     if(test) {
         Sleep(100);
@@ -106,6 +112,7 @@ static HRESULT Run(bool test) {
         for(int attempt=0;attempt<3;attempt++) {
             hr=MFCreateVirtualCamera(MFVirtualCameraType_SoftwareCameraSource,MFVirtualCameraLifetime_Session,MFVirtualCameraAccess_CurrentUser,L"TYU Camera",TYU_CAMERA_ID,nullptr,0,&camera);
             if(SUCCEEDED(hr))hr=camera->SetString(TYU_CAMERA_PIPE,pipe.c_str());
+            if(SUCCEEDED(hr))hr=format.Store(camera.Get());
             if(SUCCEEDED(hr))hr=camera->Start(nullptr);
             if(SUCCEEDED(hr))break;
             if(camera){camera->Remove();camera->Shutdown();camera.Reset();}
@@ -117,11 +124,11 @@ static HRESULT Run(bool test) {
     if(SUCCEEDED(hr)) {
         std::cout<<"READY"<<std::endl;
         _setmode(_fileno(stdin),_O_BINARY);
-        std::vector<BYTE> next(FRAME_BYTES);
+        std::vector<BYTE> next(frames->format.bytes());
         for(;;) {
             UINT32 size=0;
             if(fread(&size,1,4,stdin)!=4)break;
-            if(size!=FRAME_BYTES) {hr=E_INVALIDARG;break;}
+            if(size!=frames->format.bytes()) {hr=E_INVALIDARG;break;}
             if(fread(next.data(),1,size,stdin)!=size)break;
             {std::lock_guard lock(frames->lock);frames->frame.swap(next);}
         }
@@ -130,4 +137,18 @@ static HRESULT Run(bool test) {
     // Release COM objects before tearing down COM: CoUninitialize can unload the source DLL.
     frames->running=false;server.join();camera.Reset();installed.Reset();MFShutdown();CoUninitialize();return hr;
 }
-int wmain(int argc,wchar_t** argv) {auto hr=Run(argc>1&&wcscmp(argv[1],L"--self-test")==0);if(FAILED(hr)){std::cout<<"ERROR 0x"<<std::hex<<static_cast<unsigned long>(hr)<<std::endl;return 1;}return 0;}
+int wmain(int argc,wchar_t** argv) {
+    bool test=false;CameraFormat format;
+    for(int i=1;i<argc;i++) {
+        if(wcscmp(argv[i],L"--self-test")==0)test=true;
+        else if(wcscmp(argv[i],L"--format")==0 && i+3<argc) {
+            format.width=static_cast<UINT32>(_wtoi(argv[++i]));
+            format.height=static_cast<UINT32>(_wtoi(argv[++i]));
+            format.fps=static_cast<UINT32>(_wtoi(argv[++i]));
+        } else return 2;
+    }
+    if(!format.valid())return 2;
+    auto hr=Run(test,format);
+    if(FAILED(hr)){std::cout<<"ERROR 0x"<<std::hex<<static_cast<unsigned long>(hr)<<std::endl;return 1;}
+    return 0;
+}

@@ -554,6 +554,7 @@ impl Actor {
                     peer,
                     session,
                     stream: *stream,
+                    format: format.clone(),
                 })
                 .await;
             }

@@ -111,6 +111,7 @@ pub fn sync(window: &DesktopShell, state: &AppState) {
     data.set_camera(state.camera);
     data.set_microphone(state.microphone);
     data.set_storage(state.storage);
+    data.set_storage_pending(state.storage_pending);
     data.set_noise_reduction(state.noise_reduction);
     data.set_reduced_motion(state.reduced_motion);
     data.set_notifications(state.notifications);
@@ -292,6 +293,11 @@ pub fn run() -> Result<(), slint::PlatformError> {
             _ => {}
         }
         s.notice.clear();
+        if args.iter().any(|a| a == "--notice") {
+            s.notice =
+                "Aviso de prueba: puedes cerrar este mensaje con la X o esperar 15 segundos."
+                    .into();
+        }
     }
     sync(&window, &state.borrow());
     {
@@ -325,6 +331,13 @@ pub fn run() -> Result<(), slint::PlatformError> {
         let pairing = pairing.clone();
         let backend = backend.clone();
         window.global::<Data>().on_action(move |command| {
+            if command == "dismiss-notice" {
+                state.borrow_mut().dismiss_notice();
+                if let Some(window) = weak.upgrade() {
+                    sync(&window, &state.borrow());
+                }
+                return;
+            }
             if let Some(backend) = &backend {
                 backend
                     .borrow_mut()
@@ -364,6 +377,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
                 if let Some(server) = &pairing {
                     sync_pairing(&window, &mut state.borrow_mut(), server);
                 }
+                state.borrow_mut().update_notice(std::time::Instant::now());
                 sync(&window, &state.borrow());
             }
         });
@@ -466,6 +480,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
                 if !fixture && let Some(server) = &pairing {
                     sync_pairing(&window, &mut state.borrow_mut(), server);
                 }
+                state.borrow_mut().update_notice(std::time::Instant::now());
                 sync(&window, &state.borrow());
             }
         },
@@ -489,6 +504,14 @@ pub fn run() -> Result<(), slint::PlatformError> {
         window
             .window()
             .set_size(slint::LogicalSize::new(width as f32, height as f32));
+        if args.iter().any(|a| a == "--scroll-end") {
+            let weak = window.as_weak();
+            slint::Timer::single_shot(Duration::from_millis(900), move || {
+                if let Some(window) = weak.upgrade() {
+                    window.invoke_scroll_to_end();
+                }
+            });
+        }
         let weak = window.as_weak();
         slint::Timer::single_shot(Duration::from_millis(1300), move || {
             let Some(window) = weak.upgrade() else {

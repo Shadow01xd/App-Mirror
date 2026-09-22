@@ -24,20 +24,24 @@ class Stream final: public RuntimeClass<RuntimeClassFlags<ClassicCom>,Microsoft:
     std::mutex frameLock;
     HANDLE pipe=INVALID_HANDLE_VALUE;
     LONGLONG previous=0;
+    HANDLE pacing=nullptr;
+    CameraFormat format;
 public:
     ComPtr<IMFStreamDescriptor> descriptor;
     ComPtr<IMFAttributes> attributes;
-    ~Stream() {if(pipe!=INVALID_HANDLE_VALUE) CloseHandle(pipe);if(workQueue) MFUnlockWorkQueue(workQueue);}
-    HRESULT Init(IMFMediaSource* owner,const std::wstring& name) {
-        parent=owner;pipeName=name;
+    ~Stream() {if(pipe!=INVALID_HANDLE_VALUE) CloseHandle(pipe);if(pacing)CloseHandle(pacing);if(workQueue) MFUnlockWorkQueue(workQueue);}
+    HRESULT Init(IMFMediaSource* owner,const std::wstring& name, CameraFormat selected) {
+        parent=owner;pipeName=name;format=selected;
+        pacing=CreateWaitableTimerExW(nullptr,nullptr,CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,TIMER_ALL_ACCESS);
+        if(!pacing)return HRESULT_FROM_WIN32(GetLastError());
         HR(MFCreateEventQueue(&events));HR(MFAllocateWorkQueueEx(MF_MULTITHREADED_WORKQUEUE,&workQueue));
         HR(MFCreateMediaType(&type));
         HR(type->SetGUID(MF_MT_MAJOR_TYPE,MFMediaType_Video));HR(type->SetGUID(MF_MT_SUBTYPE,MFVideoFormat_NV12));
         HR(type->SetUINT32(MF_MT_INTERLACE_MODE,MFVideoInterlace_Progressive));
         HR(type->SetUINT32(MF_MT_ALL_SAMPLES_INDEPENDENT,TRUE));
-        HR(type->SetUINT32(MF_MT_FIXED_SIZE_SAMPLES,TRUE));HR(type->SetUINT32(MF_MT_SAMPLE_SIZE,FRAME_BYTES));
-        HR(type->SetUINT32(MF_MT_DEFAULT_STRIDE,WIDTH));HR(MFSetAttributeSize(type.Get(),MF_MT_FRAME_SIZE,WIDTH,HEIGHT));
-        HR(MFSetAttributeRatio(type.Get(),MF_MT_FRAME_RATE,30,1));HR(MFSetAttributeRatio(type.Get(),MF_MT_PIXEL_ASPECT_RATIO,1,1));
+        HR(type->SetUINT32(MF_MT_FIXED_SIZE_SAMPLES,TRUE));HR(type->SetUINT32(MF_MT_SAMPLE_SIZE,format.bytes()));
+        HR(type->SetUINT32(MF_MT_DEFAULT_STRIDE,format.width));HR(MFSetAttributeSize(type.Get(),MF_MT_FRAME_SIZE,format.width,format.height));
+        HR(MFSetAttributeRatio(type.Get(),MF_MT_FRAME_RATE,format.fps,1));HR(MFSetAttributeRatio(type.Get(),MF_MT_PIXEL_ASPECT_RATIO,1,1));
         IMFMediaType* types[]={type.Get()};HR(MFCreateStreamDescriptor(0,1,types,&descriptor));
         ComPtr<IMFMediaTypeHandler> handler;HR(descriptor->GetMediaTypeHandler(&handler));HR(handler->SetCurrentMediaType(type.Get()));
         HR(MFCreateAttributes(&attributes,4));
@@ -62,7 +66,10 @@ public:
         std::lock_guard lock(frameLock);
         if(shutdown || state!=MF_STREAM_STATE_RUNNING) return S_OK;
         auto now=MFGetSystemTime();
-        if(previous && now<previous+333333) Sleep(static_cast<DWORD>((previous+333333-now)/10000));
+        if(previous && now<previous+format.duration()) {
+            LARGE_INTEGER due;due.QuadPart=-(previous+format.duration()-now);
+            if(SetWaitableTimer(pacing,&due,0,nullptr,nullptr,FALSE))WaitForSingleObject(pacing,1000);
+        }
         previous=MFGetSystemTime();
         ComPtr<IUnknown> token;result->GetState(&token);
         HRESULT hr=Deliver(token.Get());
@@ -88,34 +95,34 @@ public:
     }
 private:
     HRESULT Deliver(IUnknown* token) {
-        std::vector<BYTE> frame(FRAME_BYTES,0);
+        std::vector<BYTE> frame(format.bytes(),0);
         // Neutral black until TYU supplies its first phone frame; never retain a previous user's image.
-        std::fill(frame.begin(),frame.begin()+WIDTH*HEIGHT,16);
-        std::fill(frame.begin()+WIDTH*HEIGHT,frame.end(),128);
+        std::fill(frame.begin(),frame.begin()+format.width*format.height,16);
+        std::fill(frame.begin()+format.width*format.height,frame.end(),128);
         for(int attempt=0;attempt<2;attempt++) {
             if(pipe==INVALID_HANDLE_VALUE) pipe=CreateFileW(pipeName.c_str(),GENERIC_READ|GENERIC_WRITE,0,nullptr,OPEN_EXISTING,FILE_FLAG_OVERLAPPED,nullptr);
             if(pipe==INVALID_HANDLE_VALUE)break;
             BYTE request=1;DWORD size=0;
-            if(PipeIO(pipe,&request,1,true)&&PipeIO(pipe,&size,4,false)&&size==FRAME_BYTES&&PipeIO(pipe,frame.data(),FRAME_BYTES,false))break;
+            if(PipeIO(pipe,&request,1,true)&&PipeIO(pipe,&size,4,false)&&size==format.bytes()&&PipeIO(pipe,frame.data(),format.bytes(),false))break;
             // Frame Server can keep the source alive while a consumer pauses. Reopen an idle pipe.
             CloseHandle(pipe);pipe=INVALID_HANDLE_VALUE;
-            std::fill(frame.begin(),frame.begin()+WIDTH*HEIGHT,16);
-            std::fill(frame.begin()+WIDTH*HEIGHT,frame.end(),128);
+            std::fill(frame.begin(),frame.begin()+format.width*format.height,16);
+            std::fill(frame.begin()+format.width*format.height,frame.end(),128);
         }
         ComPtr<IMFSample> sample;HR(allocator->AllocateSample(&sample));
         ComPtr<IMFMediaBuffer> buffer;HR(sample->GetBufferByIndex(0,&buffer));
         ComPtr<IMF2DBuffer> two;
         if(SUCCEEDED(buffer.As(&two))) {
             BYTE* output=nullptr;LONG pitch=0;HR(two->Lock2D(&output,&pitch));
-            if(pitch<static_cast<LONG>(WIDTH)) {two->Unlock2D();return E_UNEXPECTED;}
-            for(UINT32 y=0;y<HEIGHT*3/2;y++) memcpy(output+y*pitch,frame.data()+y*WIDTH,WIDTH);
+            if(pitch<static_cast<LONG>(format.width)) {two->Unlock2D();return E_UNEXPECTED;}
+            for(UINT32 y=0;y<format.height*3/2;y++) memcpy(output+y*pitch,frame.data()+y*format.width,format.width);
             HR(two->Unlock2D());
         } else {
             BYTE* output=nullptr;DWORD maximum=0;HR(buffer->Lock(&output,&maximum,nullptr));
-            if(maximum<FRAME_BYTES) {buffer->Unlock();return E_UNEXPECTED;}
-            memcpy(output,frame.data(),FRAME_BYTES);HR(buffer->Unlock());HR(buffer->SetCurrentLength(FRAME_BYTES));
+            if(maximum<format.bytes()) {buffer->Unlock();return E_UNEXPECTED;}
+            memcpy(output,frame.data(),format.bytes());HR(buffer->Unlock());HR(buffer->SetCurrentLength(format.bytes()));
         }
-        HR(sample->SetSampleTime(previous));HR(sample->SetSampleDuration(333333));
+        HR(sample->SetSampleTime(previous));HR(sample->SetSampleDuration(format.duration()));
         if(token) HR(sample->SetUnknown(MFSampleExtension_Token,token));
         return events->QueueEventParamUnk(MEMediaSample,GUID_NULL,S_OK,sample.Get());
     }
@@ -136,7 +143,8 @@ public:
         WCHAR name[256]{};HR(activation->GetString(TYU_CAMERA_PIPE,name,256,nullptr));
         if(wcsncmp(name,L"\\\\.\\pipe\\TYU-Camera-",20)!=0) return E_INVALIDARG;
         stream=Make<Stream>();if(!stream)return E_OUTOFMEMORY;
-        HR(stream->Init(this,name));IMFStreamDescriptor* descriptors[]={stream->descriptor.Get()};
+        CameraFormat format;HR(format.Load(activation));
+        HR(stream->Init(this,name,format));IMFStreamDescriptor* descriptors[]={stream->descriptor.Get()};
         HR(MFCreatePresentationDescriptor(1,descriptors,&presentation));return presentation->SelectStream(0);
     }
     EVENTS

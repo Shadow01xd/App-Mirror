@@ -17,14 +17,15 @@ export { Data, Motion, MirrorWindow }
 export component DesktopShell inherits Window {
     title: "TYU — Tu teléfono, en tu escritorio";
     preferred-width: 1260px; preferred-height: 820px;
-    min-width: 1000px; min-height: 660px;
+    min-width: 620px; min-height: 420px;
     background: Colors.background;
     default-font-family: Typography.ui-family;
     default-font-size: 14px;
     private property <int> current-page: Data.page;
     private property <float> enter: 1;
     private property <bool> animate-enter: true;
-    changed current-page => { root.animate-enter = false; root.enter = 0; entrance-timer.start(); }
+    public function scroll-to-end() { pages.viewport-y = min(0px, pages.visible-height - pages.viewport-height); }
+    changed current-page => { pages.viewport-y = 0px; root.animate-enter = false; root.enter = 0; entrance-timer.start(); }
     entrance-timer := Timer { interval: 20ms; triggered => { root.animate-enter = true; root.enter = 1; self.stop(); } }
     animate enter { duration: root.animate-enter ? Motion.navigate : 0ms; easing: cubic-bezier(0.2, 0, 0, 1); }
     init => { Palette.color-scheme = ColorScheme.dark; }
@@ -38,12 +39,23 @@ export component DesktopShell inherits Window {
             }
             Rectangle { y: parent.height - 1px; height: 1px; width: parent.width; background: #242424; }
         }
-        HorizontalLayout { spacing: 0px;
-            TyuSidebar { enabled: Data.dialog == 0; }
-            ScrollView {
+        Rectangle { min-height: 0px; min-width: 0px; vertical-stretch: 1;
+            sidebar := TyuSidebar { x: 0px; y: 0px; height: parent.height; enabled: Data.dialog == 0; compact: root.width < 1000px; }
+            pages := ScrollView {
+                x: sidebar.width; y: 0px; width: parent.width - sidebar.width; height: parent.height;
                 enabled: Data.dialog == 0;
+                viewport-width: self.visible-width;
+                viewport-height: max(self.visible-height, page-content.preferred-height);
+                horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+                vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
                 opacity: 0.75 + root.enter * 0.25;
-                VerticalLayout { padding: 30px; alignment: start;
+                page-content := VerticalLayout {
+                    x: 0px; y: 0px;
+                    width: pages.visible-width;
+                    height: self.preferred-height;
+                    padding: root.width < 1000px ? 18px : 30px;
+                    padding-right: root.width < 1000px ? 28px : 38px;
+                    alignment: start;
                     if Data.page == 0: HomeScreen { compact: root.height < 760px; }
                     if Data.page == 1: TransferScreen {}
                     if Data.page == 2: SessionsScreen {}
@@ -64,11 +76,13 @@ export component DesktopShell inherits Window {
         }
     }
     if Data.notice != "" && Data.notifications && Data.dialog == 0: Rectangle {
-        x: parent.width - self.width - 30px; y: parent.height - 100px; width: 400px; height: 52px;
+        x: parent.width - self.width - 20px; y: parent.height - self.height - 48px;
+        width: min(480px, parent.width - 40px); height: notice-content.preferred-height;
         background: Colors.surface-muted; border-width: 1px; border-color: #55554b; border-radius: 8px;
-        HorizontalLayout { padding: 13px; spacing: 10px;
+        notice-content := HorizontalLayout { padding: 12px; spacing: 10px;
             Image { source: @image-url("../../../assets/icons/check.svg"); width: 20px; colorize: Colors.accent; }
-            Text { text: Data.notice; font-size: 12px; color: Colors.text-primary; wrap: word-wrap; }
+            Text { text: Data.notice; font-size: 12px; color: Colors.text-primary; wrap: word-wrap; vertical-alignment: center; horizontal-stretch: 1; }
+            TyuButton { label: ""; accessible-label: "Cerrar aviso"; has-icon: true; icon: @image-url("../../../assets/icons/close.svg"); quiet: true; width: 40px; clicked => { Data.action("dismiss-notice"); } }
         }
     }
     if Data.dialog != 0: TyuModal {}

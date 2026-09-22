@@ -28,7 +28,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         Capability::FileReceive,
     ];
     let mut node = TyuNode::start(config).await?;
-    let storage = bypass_storage::StorageBridge::start(node.commands.clone())?;
+    let mut storage = bypass_storage::StorageBridge::start(node.commands.clone())?;
     node.command(TyuCommand::BeginPairing {
         endpoint: format!("10.0.2.2:{}", node.address.port()).parse()?,
     })
@@ -40,9 +40,16 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let mut files = 0;
     let deadline = tokio::time::sleep(Duration::from_secs(180));
     tokio::pin!(deadline);
+    let mut status_tick = tokio::time::interval(Duration::from_millis(100));
     loop {
         tokio::select! {
             _=&mut deadline=>break,
+            _=status_tick.tick()=>{
+                if let Some(result)=storage.poll_mount() {
+                    println!("STORAGE_MOUNTED {}",result?);
+                    if std::env::var_os("TYU_PROBE_OPEN_STORAGE").is_some(){storage.open()?;}
+                }
+            },
             event=node.events.recv()=>{
                 let Some(event)=event else {break;};
                 if storage.broker.deliver(&event) {continue;}
@@ -51,11 +58,15 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                     TyuEvent::PairingRequest {request,..}=>node.command(TyuCommand::AcceptPairing {request}).await?,
                     TyuEvent::ServiceStarted {peer,session,service}=>{
                         println!("SERVICE {service:?}");
-                        if service==ServiceKind::Camera {camera_session=Some(session);camera=Some(bypass_camera::Camera::new()?);}
-                        if service==ServiceKind::Storage {storage.mount(peer,"Android Bypass Test")?;if std::env::var_os("TYU_PROBE_OPEN_STORAGE").is_some(){storage.open()?;}println!("STORAGE_MOUNTED");}
+                        if service==ServiceKind::Camera {camera_session=Some(session);}
+                        if service==ServiceKind::Storage {storage.mount(peer,"Android Bypass Test")?;println!("STORAGE_PENDING");}
+                    }
+                    TyuEvent::MediaStarted {session,format:MediaMetadata::Video(format),..} if Some(session)==camera_session => {
+                        camera=Some(bypass_camera::Camera::with_format(format.width,format.height,format.fps)?);
+                        println!("CAMERA_FORMAT {}x{}@{}",format.width,format.height,format.fps);
                     }
                     TyuEvent::MediaFrame {session,data,..}=>{
-                        if Some(session)==camera_session {if camera.as_mut().unwrap().push(&data)? {pictures+=1;if pictures==30 {println!("CAMERA_30_FRAMES");}}}
+                        if Some(session)==camera_session {if let Some(camera)=camera.as_mut() && camera.push(&data)? {pictures+=1;if pictures==30 {println!("CAMERA_30_FRAMES");}}}
                         else {audio+=data.len();}
                     }
                     TyuEvent::TransferComplete {..}=>{files+=1;println!("FILE_RECEIVED");}

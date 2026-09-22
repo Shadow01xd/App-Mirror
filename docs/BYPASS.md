@@ -4,7 +4,7 @@ Bypass usa la conexión autenticada de TYU Core sobre QUIC entre Android y Windo
 
 ## Cámara propia de TYU
 
-`desktop/native/camera` contiene la fuente COM y el publicador de cámara virtual de TYU. No depende de OBS ni de otra aplicación de cámara. Requiere Windows 11 (build 22000 o posterior) y permiso de cámara de Windows. Publica **TYU Camera (Windows Virtual Camera)** mientras el servicio está activo. Android captura con Camera2, codifica H.264 a 1280×720 y 30 fps solicitados; Windows decodifica y entrega NV12 mediante Media Foundation. La frecuencia efectiva depende del dispositivo y de la carga.
+`desktop/native/camera` contiene la fuente COM y el publicador de cámara virtual de TYU. No depende de OBS ni de otra aplicación de cámara. Requiere Windows 11 (build 22000 o posterior) y permiso de cámara de Windows. Publica **TYU Camera (Windows Virtual Camera)** mientras el servicio está activo. Android consulta las capacidades de Camera2 y del codificador H.264 para elegir, en orden, 1920×1080 a 60 fps, 1920×1080 a 30 fps, 1280×720 a 60 fps o 1280×720 a 30 fps. Windows decodifica y entrega NV12 mediante Media Foundation con las dimensiones y frecuencia negociadas. No se amplía artificialmente una captura de 720p. La frecuencia efectiva depende de la cámara, la iluminación, el codificador y la carga de la red local.
 
 Compilar desde la raíz con las herramientas C++ de Visual Studio y Windows SDK instaladas:
 
@@ -29,6 +29,8 @@ Referencia de la API de Windows: [MFCreateVirtualCamera](https://learn.microsoft
 
 Al activar Almacenamiento y autorizar el acceso a archivos en Android, se registra **TYU: nombre del móvil** en Este equipo y en el árbol del Explorador. El adaptador WebDAV escucha exclusivamente en `127.0.0.1`, con una ruta aleatoria; Windows WebClient lo consume y las operaciones se reenvían por QUIC al teléfono vinculado. No se abre WebDAV a la red.
 
+La entrada se publica solamente después de recibir el permiso y comprobar una lectura real mediante Windows WebClient. Mientras tanto, Bypass muestra que está preparando la carpeta y permite cancelar. Cada ejecución usa una identidad nueva en el Explorador para evitar que Windows reutilice el puerto de una sesión anterior; las entradas antiguas de TYU que ya no tienen servidor se retiran.
+
 Permite listar por páginas, leer, crear carpetas, escribir, renombrar y borrar. La escritura se prepara en un archivo temporal hermano y se renombra al terminar. Incluye los bloqueos exclusivos que usa el Explorador. Al apagar el servicio se revoca el proveedor y se retira la entrada del Explorador.
 
 El permiso de Android permite el almacenamiento compartido (DCIM, Download, Documents, etc.). No elimina las restricciones del sistema sobre datos privados de aplicaciones, `Android/data` o `Android/obb`. La versión actual exporta el almacenamiento compartido principal, no una tarjeta SD adicional. No conserva fechas ni atributos de Windows al copiar. El servicio WebClient debe estar disponible. Su límite de tamaño depende de la configuración de Windows: en el PC de validación era 50.000.000 bytes. TYU no modifica ese ajuste global silenciosamente; para archivos mayores utiliza la transferencia directa de la aplicación (límite del Core: 8 GiB).
@@ -45,8 +47,13 @@ La instalación del paquete firmado y las pruebas pendientes están documentadas
 
 ## Validación reproducible
 
+Validación de esta actualización (2026-09-21): Windows WebClient leyó el archivo del emulador Android y escribió otro que la prueba Android verificó. La sesión recibió una transferencia, 373 imágenes decodificadas y 5.299.200 bytes de audio; el perfil compatible del emulador fue 720p/30. La fuente nativa de TYU pasó además sus pruebas de 70 muestras a 720p/30, 1080p/30 y 1080p/60. Esto verifica el transporte de audio, no la salida de un micrófono virtual. Queda pendiente medir 1080p/60 con una cámara física compatible.
+
+La suite completa detectó un fallo en `backend::hw_encode::tests::hardware_encoder_produces_h264_fast`: el codificador AMD del Monitor midió 13,5 ms por imagen frente al umbral de menos de 12 ms, también al ejecutarla sin paralelismo. Ese código y ese umbral se conservan. Esta prueba de rendimiento del Monitor no utiliza la cámara Android de Bypass.
+
 - `cargo fmt --all -- --check`, `cargo check --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`.
-- `target/tyu-camera/TyuCameraHost.exe --self-test`: 70 muestras NV12 verificadas, incluida una pausa y reconexión de tubería.
+- `target/tyu-camera/TyuCameraHost.exe --self-test`: 70 muestras NV12 verificadas, incluida una pausa y reconexión de tubería. Repetir con `--format 1920 1080 30` y `--format 1920 1080 60` comprueba también el formato y la duración de cada muestra en Full HD.
+- Con `TYU_TEST_WEBCLIENT=1`, la prueba de almacenamiento de escritorio comprueba que no se publique antes del permiso y realiza lectura, escritura, renombrado y eliminación mediante la ruta UNC real de Windows.
 - `Android/gradlew.bat :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug` con Java 17 y `ANDROID_HOME`. El APK incluye ARM64 y x86_64.
 - `desktop/examples/bypass_probe.rs` es un host explícito de pruebas sobre el mismo Core; acepta automáticamente **sólo en ese ejecutable de prueba**, nunca en TYU Desktop. Recibe un directorio temporal, publica allí `invitation.txt` para el alias de emulador `10.0.2.2` y se cierra a los 180 segundos.
 - `BypassIntegrationTest` recibe esa invitación mediante el argumento de instrumentación `tyuPairingUri`. El emulador de prueba necesita CAMERA, RECORD_AUDIO y acceso a todos los archivos concedidos. Durante la ventana de 60 segundos, escribir `written from Windows` en `Documents/TYUBypassValidation/pc.txt` mediante la entrada TYU del Explorador. El test verifica el contenido en Android, una transferencia directa, sesiones de cámara y audio, y que no haya sesiones Mirror/Monitor. Sin invitación explícita, esta prueba se omite.

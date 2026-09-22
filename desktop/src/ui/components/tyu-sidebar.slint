@@ -1,42 +1,50 @@
+import { ScrollView } from "std-widgets.slint";
 import { Colors } from "../theme/colors.slint";
 import { Data } from "../data.slint";
 import { TyuButton } from "tyu-button.slint";
 export component TyuSidebar inherits Rectangle {
     in property <bool> enabled: true;
-    width: 260px; background: Colors.stage;
+    in property <bool> compact: false;
+    width: root.compact ? 76px : 240px; background: Colors.stage;
     Rectangle { x: parent.width - 1px; width: 1px; height: parent.height; background: Colors.border; }
-    VerticalLayout {
-        padding: 22px; spacing: 18px;
-        Text { text: "Conexiones"; font-size: 18px; font-weight: 600; color: Colors.text-primary; height: 40px; vertical-alignment: center; }
-        if Data.connected: TyuButton {
+    nav-scroll := ScrollView {
+        x: 0px; y: 0px;
+        width: root.width; height: root.height;
+        viewport-width: self.visible-width; viewport-height: max(self.visible-height, nav.min-height);
+        horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+        nav := VerticalLayout { x: 0px; y: 0px; width: nav-scroll.visible-width; height: nav-scroll.viewport-height;
+        padding: root.compact ? 12px : 22px; spacing: 18px;
+        if !root.compact: Text { text: "Conexiones"; font-size: 18px; font-weight: 600; color: Colors.text-primary; height: 40px; vertical-alignment: center; }
+        if Data.connected: TyuButton { icon-only: root.compact;
             label: Data.device-name; icon: @image-url("../../../assets/icons/phone.svg"); has-icon: true;
             icon-size: 24px; align-left: true; secondary: true; selected: Data.page == 0; height: 54px;
             clicked => { Data.option("page", 0); }
         }
-        if Data.connected: Text { text: "Conectado · Wi-Fi"; color: Colors.success; font-size: 12px; }
-        if !Data.connected: Text { text: "Ningún teléfono conectado"; wrap: word-wrap; color: Colors.text-secondary; font-size: 13px; }
-        if !Data.connected: TyuButton {
+        if Data.connected && !root.compact: Text { text: "Conectado · Wi-Fi"; color: Colors.success; font-size: 12px; }
+        if !Data.connected && !root.compact: Text { text: "Ningún teléfono conectado"; wrap: word-wrap; color: Colors.text-secondary; font-size: 13px; }
+        if !Data.connected: TyuButton { icon-only: root.compact;
             label: "Conectar teléfono"; icon: @image-url("../../../assets/icons/add.svg"); has-icon: true;
             icon-size: 22px; align-left: true; secondary: true; height: 46px;
             clicked => { Data.option("page", 0); }
         }
         if !Data.connected: VerticalLayout {
             spacing: 8px;
-            for device[index] in Data.devices: TyuButton {
-                label: device.name; align-left: true; secondary: true; height: 46px;
+            for device[index] in Data.devices: TyuButton { icon-only: root.compact;
+                label: device.name; has-icon: true; icon: @image-url("../../../assets/icons/phone.svg"); align-left: true; secondary: true; height: 46px;
                 clicked => { Data.option("device", index); Data.action("connect"); }
             }
         }
         Rectangle { vertical-stretch: 1; background: transparent; }
         Rectangle { height: 1px; background: Colors.border; }
-        TyuButton { label: "Actividad"; align-left: true; quiet: true; selected: Data.page == 2; icon: @image-url("../../../assets/icons/history.svg"); icon-size: 22px; has-icon: true; clicked => { Data.option("page", 2); } }
-        TyuButton { label: "Configuración"; align-left: true; quiet: true; selected: Data.page == 3; icon: @image-url("../../../assets/icons/settings.svg"); icon-size: 22px; has-icon: true; clicked => { Data.option("page", 3); } }
+        TyuButton { icon-only: root.compact; label: "Actividad"; align-left: true; quiet: true; selected: Data.page == 2; icon: @image-url("../../../assets/icons/history.svg"); icon-size: 22px; has-icon: true; clicked => { Data.option("page", 2); } }
+        TyuButton { icon-only: root.compact; label: "Configuración"; align-left: true; quiet: true; selected: Data.page == 3; icon: @image-url("../../../assets/icons/settings.svg"); icon-size: 22px; has-icon: true; clicked => { Data.option("page", 3); } }
         Rectangle { height: 1px; background: Colors.border; }
         Rectangle {
             height: 50px; background: transparent;
             Image { x: 0px; y: 12px; width: 26px; height: 26px; source: @image-url("../../../assets/icons/desktop.svg"); colorize: Colors.text-secondary; }
-            Text { x: 40px; y: 4px; height: 24px; text: "Este equipo"; color: Colors.text-primary; font-size: 13px; vertical-alignment: center; }
-            Text { x: 40px; y: 28px; text: "TYU Desktop"; color: Colors.muted; font-size: 11px; }
+            if !root.compact: Text { x: 40px; y: 4px; height: 24px; text: "Este equipo"; color: Colors.text-primary; font-size: 13px; vertical-alignment: center; }
+            if !root.compact: Text { x: 40px; y: 28px; text: "TYU Desktop"; color: Colors.muted; font-size: 11px; }
         }
     }
+}
 }

@@ -7,7 +7,7 @@ export component SettingsScreen inherits Rectangle {
         Text { text: "Configuración"; font-size: 28px; font-weight: 600; color: Colors.text-primary; }
         Text { text: "Preferencias de esta sesión de escritorio."; font-size: 13px; color: Colors.text-secondary; }
         Rectangle { height: 1px; background: Colors.border; }
-        HorizontalLayout { height: 70px; spacing: 24px;
+        HorizontalLayout { min-height: 70px; spacing: 24px;
             VerticalLayout { spacing: 6px;
                 Text { text: "Reducir animaciones"; font-size: 16px; font-weight: 600; color: Colors.text-primary; }
                 Text { text: "Elimina el recorrido de la señal y las transiciones de controles."; font-size: 13px; color: Colors.text-secondary; wrap: word-wrap; }
@@ -15,7 +15,7 @@ export component SettingsScreen inherits Rectangle {
             TyuToggle { label: "Reducir animaciones"; checked: Data.reduced-motion; toggled(v) => { Data.toggle("motion", v); } }
         }
         Rectangle { height: 1px; background: Colors.border; }
-        HorizontalLayout { height: 70px; spacing: 24px;
+        HorizontalLayout { min-height: 70px; spacing: 24px;
             VerticalLayout { spacing: 6px;
                 Text { text: "Avisos dentro de la app"; font-size: 16px; font-weight: 600; color: Colors.text-primary; }
                 Text { text: "Muestra los avisos de conexión y actividad."; font-size: 13px; color: Colors.text-secondary; wrap: word-wrap; }

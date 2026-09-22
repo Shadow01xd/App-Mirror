@@ -12,15 +12,15 @@ export component BypassScreen inherits Rectangle {
         spacing: Spacing.md;
         alignment: start;
         for item in [
-            { name: "Cámara", detail: "«TYU Camera (Windows Virtual Camera)» · 720p / 30 fps", key: "camera", active: Data.camera },
+            { name: "Cámara", detail: "TYU Camera · hasta 1080p / 60 fps según el teléfono", key: "camera", active: Data.camera },
             { name: "Micrófono", detail: "El teléfono como micrófono · 48 kHz", key: "microphone", active: Data.microphone },
-            { name: "Almacenamiento", detail: "TYU: " + Data.device-name + " · Explorador de Windows", key: "storage", active: Data.storage }
-        ]: HorizontalLayout { spacing: 18px; height: 64px;
+            { name: "Almacenamiento", detail: Data.storage-pending ? "Confirma el acceso a archivos en Android. Preparando la carpeta…" : "TYU: " + Data.device-name + " · Explorador de Windows", key: "storage", active: Data.storage || Data.storage-pending }
+        ]: HorizontalLayout { spacing: 18px; min-height: 64px;
             VerticalLayout { spacing: 4px;
                 Text { text: item.name; color: Colors.text-primary; font-size: 17px; }
                 Text { text: item.detail; color: Colors.text-secondary; font-size: 12px; wrap: word-wrap; }
             }
-            TyuButton { label: item.active ? "Desactivar" : "Activar"; secondary: true; width: 120px; clicked => { Data.toggle(item.key, !item.active); } }
+            TyuButton { label: item.key == "storage" && Data.storage-pending ? "Cancelar" : item.active ? "Desactivar" : "Activar"; secondary: true; width: 120px; clicked => { Data.toggle(item.key, !item.active); } }
         }
         if Data.needs-audio: TyuComponentNotice {
             message: "Sin un cable de audio virtual el teléfono se oye por los altavoces, pero no puede elegirse como micrófono.";

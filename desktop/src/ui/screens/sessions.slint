@@ -16,7 +16,7 @@ export component SessionsScreen inherits Rectangle {
                 Text { text: "Conecta un teléfono para registrar su actividad."; font-size: 13px; color: Colors.text-secondary; horizontal-alignment: center; }
             }
         }
-        for entry in Data.sessions: Rectangle { height: 56px;
+        for entry in Data.sessions: Rectangle { min-height: 56px;
             background: transparent;
             HorizontalLayout { spacing: 14px;
                 Rectangle { width: 22px; background: transparent; Image { y: (parent.height - self.height) / 2; source: @image-url("../../../assets/icons/history.svg"); width: 22px; height: 22px; colorize: Colors.accent; } }

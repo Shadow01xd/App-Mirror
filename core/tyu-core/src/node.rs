@@ -255,6 +255,7 @@ pub enum TyuEvent {
         peer: DeviceId,
         session: SessionId,
         stream: StreamId,
+        format: MediaMetadata,
     },
     MediaStopped {
         peer: DeviceId,
